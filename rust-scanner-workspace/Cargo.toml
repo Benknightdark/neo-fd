@@ -1,0 +1,6 @@
+[workspace]
+members = [
+    "rust-scanner-cli",
+    "scanner-core"
+]
+resolver = "2"
