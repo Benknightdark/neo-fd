@@ -43,14 +43,17 @@ npm install
 npm run tauri dev
 ```
 
-### 3. 編譯 Release 版本
+### 3. 編譯 Release 執行檔 (CLI)
 
-若要獲得最佳的掃描效能，強烈建議編譯 Release 版本：
+若要獲得最佳的掃描效能並產生獨立的執行檔，請執行：
 
 ```bash
 cd rust-scanner-workspace
-cargo build --release
+cargo build --release --bin rust-scanner-cli
 ```
+
+編譯完成後，執行檔將位於：
+`rust-scanner-workspace/target/release/rust-scanner-cli`
 
 ## 如何將核心引擎整合至其他專案？
 
