@@ -3,19 +3,25 @@
 ## Project Overview
 This project is a high-performance, multi-threaded file scanning tool written in Rust. It leverages a Cargo Workspace architecture to separate the core scanning engine from the user interface. The tool allows users to scan directories (or the entire filesystem) using regular expressions, with built-in patterns for Taiwanese ID numbers and top 10 surnames.
 
-The workspace consists of two main crates:
-1.  **`scanner-core` (Library)**: The core scanning engine. It utilizes the `ignore` crate for fast, multi-threaded directory traversal (respecting `.gitignore` and automatically skipping non-UTF-8 files) and the `regex` crate for pattern matching. It uses a single-buffer read strategy to minimize memory allocations.
-2.  **`rust-scanner-cli` (Binary)**: A Terminal User Interface (TUI) built with `ratatui` and `crossterm`. It provides an interactive way for users to select built-in regex patterns, input custom patterns with real-time error validation, and specify target directories for scanning.
+The workspace consists of three main crates:
+1.  **`scanner-core` (Library)**: The core scanning engine. It utilizes the `ignore` crate for fast, multi-threaded directory traversal and the `regex` crate for pattern matching. It uses a flexible callback-based API (`on_match`) to support different UI frontends and a single-buffer read strategy to minimize memory allocations.
+2.  **`rust-scanner-cli` (Binary)**: A Terminal User Interface (TUI) built with `ratatui` and `crossterm`. It provides an interactive way for users to select patterns and target directories.
+3.  **`scanner-desktop` (Tauri App)**: A modern desktop application built with Tauri 2 and Vue 3. It provides a graphical interface for real-time scanning results and configuration.
 
 ## Building and Running
 
-Ensure you have Rust and Cargo installed (edition 2024).
+Ensure you have Rust, Cargo, and Node.js installed.
 
 *   **To run the TUI application:**
-    Navigate to the workspace directory and run the CLI project:
     ```bash
     cd rust-scanner-workspace
     cargo run --bin rust-scanner-cli
+    ```
+*   **To run the Desktop application (Development):**
+    ```bash
+    cd rust-scanner-workspace/scanner-desktop
+    npm install
+    npm run tauri dev
     ```
 *   **To build the workspace (Debug):**
     ```bash

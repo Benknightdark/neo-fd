@@ -1,6 +1,7 @@
 [workspace]
 members = [
     "rust-scanner-cli",
-    "scanner-core"
+    "scanner-core",
+    "scanner-desktop/src-tauri"
 ]
 resolver = "2"
