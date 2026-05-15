@@ -49,7 +49,7 @@ async function startScan() {
       patterns: activePatterns,
     });
   } catch (err) {
-    alert('掃描啟動失敗: ' + err);
+    alert(`掃描啟動失敗: ${err}`);
     isScanning.value = false;
   }
 }
