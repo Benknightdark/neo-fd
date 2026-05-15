@@ -55,6 +55,19 @@ cargo build --release --bin rust-scanner-cli
 編譯完成後，執行檔將位於：
 `rust-scanner-workspace/target/release/rust-scanner-cli`
 
+### 4. 編譯 Release 執行檔 (Desktop)
+
+若要編譯桌面應用程式的生產環境版本 (包含安裝包)，請執行：
+
+```bash
+cd rust-scanner-workspace/scanner-desktop
+npm run tauri build
+```
+
+編譯完成後的安裝檔 (如 .app, .dmg, .msi, .deb 等) 將位於：
+`rust-scanner-workspace/scanner-desktop/src-tauri/target/release/bundle/`
+
+
 ## 如何將核心引擎整合至其他專案？
 
 如果您有其他 Rust 專案需要使用這個高效能的掃描引擎，只需在該專案的 `Cargo.toml` 中加入本地相依路徑：
