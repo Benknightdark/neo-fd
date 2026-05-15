@@ -1,65 +1,69 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
-import { invoke } from '@tauri-apps/api/core'
-import { listen } from '@tauri-apps/api/event'
+import { invoke } from '@tauri-apps/api/core';
+import { listen } from '@tauri-apps/api/event';
+import { onMounted, ref } from 'vue';
 
 interface ScanResult {
-  path: string
-  line_num: number
-  pattern_name: string
-  matched_text: string
+  path: string;
+  line_num: number;
+  pattern_name: string;
+  matched_text: string;
 }
 
-const scanPath = ref('')
-const isScanning = ref(false)
-const results = ref<ScanResult[]>([])
+const scanPath = ref('');
+const isScanning = ref(false);
+const results = ref<ScanResult[]>([]);
 const selectedPatterns = ref([
   { name: '身分證字號', pattern: '[A-Za-z][12]\\d{8}', enabled: true },
-  { name: '台灣十大姓氏', pattern: '[陳林黃張李王吳劉蔡楊][\u4e00-\u9fa5]{2}', enabled: true }
-])
-const customPattern = ref('')
-const customName = ref('自定義')
+  {
+    name: '台灣十大姓氏',
+    pattern: '[陳林黃張李王吳劉蔡楊][\u4e00-\u9fa5]{2}',
+    enabled: true,
+  },
+]);
+const customPattern = ref('');
+const customName = ref('自定義');
 
 async function startScan() {
-  if (isScanning.value) return
-  
+  if (isScanning.value) return;
+
   const activePatterns = selectedPatterns.value
-    .filter(p => p.enabled)
-    .map(p => [p.name, p.pattern])
-    
+    .filter((p) => p.enabled)
+    .map((p) => [p.name, p.pattern]);
+
   if (customPattern.value) {
-    activePatterns.push([customName.value, customPattern.value])
+    activePatterns.push([customName.value, customPattern.value]);
   }
-  
+
   if (activePatterns.length === 0) {
-    alert('請至少選擇或輸入一個正則表達式')
-    return
+    alert('請至少選擇或輸入一個正則表達式');
+    return;
   }
-  
-  results.value = []
-  isScanning.value = true
-  
+
+  results.value = [];
+  isScanning.value = true;
+
   try {
     await invoke('scan_directory', {
       path: scanPath.value || '/',
-      patterns: activePatterns
-    })
+      patterns: activePatterns,
+    });
   } catch (err) {
-    alert('掃描啟動失敗: ' + err)
-    isScanning.value = false
+    alert('掃描啟動失敗: ' + err);
+    isScanning.value = false;
   }
 }
 
 onMounted(async () => {
   await listen<ScanResult>('scan-result', (event) => {
-    results.value.push(event.payload)
-  })
-  
+    results.value.push(event.payload);
+  });
+
   await listen('scan-finished', () => {
-    isScanning.value = false
-    alert('掃描已完成')
-  })
-})
+    isScanning.value = false;
+    alert('掃描已完成');
+  });
+});
 </script>
 
 <template>
