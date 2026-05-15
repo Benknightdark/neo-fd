@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
-import { onMounted, ref } from 'vue';
+import { useVirtualList } from '@vueuse/core';
+import { onMounted, ref, shallowRef } from 'vue';
 
 interface ScanResult {
   path: string;
@@ -12,7 +13,11 @@ interface ScanResult {
 
 const scanPath = ref('');
 const isScanning = ref(false);
-const results = ref<ScanResult[]>([]);
+const results = shallowRef<ScanResult[]>([]);
+const { list, containerProps, wrapperProps } = useVirtualList(results, {
+  itemHeight: 45, // Match row height
+});
+
 const selectedPatterns = ref([
   { name: '身分證字號', pattern: '[A-Za-z][12]\\d{8}', enabled: true },
   {
@@ -23,6 +28,17 @@ const selectedPatterns = ref([
 ]);
 const customPattern = ref('');
 const customName = ref('自定義');
+
+// Buffer logic for batching updates
+let resultBuffer: ScanResult[] = [];
+let batchTimer: number | null = null;
+
+function flushBuffer() {
+  if (resultBuffer.length > 0) {
+    results.value = [...results.value, ...resultBuffer];
+    resultBuffer = [];
+  }
+}
 
 async function startScan() {
   if (isScanning.value) return;
@@ -43,6 +59,9 @@ async function startScan() {
   results.value = [];
   isScanning.value = true;
 
+  // Start batching timer
+  batchTimer = window.setInterval(flushBuffer, 100);
+
   try {
     await invoke('scan_directory', {
       path: scanPath.value || '/',
@@ -51,16 +70,22 @@ async function startScan() {
   } catch (err) {
     alert(`掃描啟動失敗: ${err}`);
     isScanning.value = false;
+    if (batchTimer) clearInterval(batchTimer);
   }
 }
 
 onMounted(async () => {
   await listen<ScanResult>('scan-result', (event) => {
-    results.value.push(event.payload);
+    resultBuffer.push(event.payload);
   });
 
   await listen('scan-finished', () => {
     isScanning.value = false;
+    flushBuffer(); // Final flush
+    if (batchTimer) {
+      clearInterval(batchTimer);
+      batchTimer = null;
+    }
     alert('掃描已完成');
   });
 });
@@ -98,25 +123,22 @@ onMounted(async () => {
         <h1>掃描結果 ({{ results.length }})</h1>
       </header>
       
-      <div class="table-container">
-        <table>
-          <thead>
-            <tr>
-              <th>類別</th>
-              <th>檔案路徑</th>
-              <th>行號</th>
-              <th>匹配內容</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="(res, index) in results" :key="index">
-              <td><span class="badge">{{ res.pattern_name }}</span></td>
-              <td class="path" :title="res.path">{{ res.path }}</td>
-              <td>{{ res.line_num }}</td>
-              <td class="text">{{ res.matched_text }}</td>
-            </tr>
-          </tbody>
-        </table>
+      <div class="table-header">
+        <div class="col type">類別</div>
+        <div class="col path">檔案路徑</div>
+        <div class="col line">行號</div>
+        <div class="col matched">匹配內容</div>
+      </div>
+
+      <div v-bind="containerProps" class="table-container">
+        <div v-bind="wrapperProps">
+          <div v-for="item in list" :key="item.index" class="table-row" :style="{ height: '45px' }">
+            <div class="col type"><span class="badge">{{ item.data.pattern_name }}</span></div>
+            <div class="col path" :title="item.data.path">{{ item.data.path }}</div>
+            <div class="col line">{{ item.data.line_num }}</div>
+            <div class="col matched">{{ item.data.matched_text }}</div>
+          </div>
+        </div>
         <div v-if="results.length === 0 && !isScanning" class="empty">
           尚未開始掃描或無結果
         </div>
@@ -193,29 +215,39 @@ header {
   border-bottom: 1px solid #eee;
 }
 
-.table-container {
-  flex: 1;
-  overflow: auto;
-  padding: 20px;
-}
-
-table {
-  width: 100%;
-  border-collapse: collapse;
-}
-
-th, td {
-  text-align: left;
-  padding: 12px;
+.table-header {
+  display: flex;
+  background: #fafafa;
   border-bottom: 1px solid #eee;
+  padding: 0 20px;
+  font-weight: bold;
   font-size: 0.9rem;
 }
 
-th {
-  background: #fafafa;
-  position: sticky;
-  top: 0;
+.table-row {
+  display: flex;
+  align-items: center;
+  padding: 0 20px;
+  border-bottom: 1px solid #f9f9f9;
+  font-size: 0.9rem;
 }
+
+.table-container {
+  flex: 1;
+  overflow: auto;
+}
+
+.col {
+  padding: 12px 5px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.type { width: 120px; }
+.path { flex: 1; color: #666; }
+.line { width: 80px; }
+.matched { width: 250px; color: #d63384; font-family: monospace; }
 
 .badge {
   background: #e7f3ff;
@@ -223,19 +255,6 @@ th {
   padding: 2px 8px;
   border-radius: 12px;
   font-size: 0.8rem;
-}
-
-.path {
-  max-width: 300px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  color: #666;
-}
-
-.text {
-  color: #d63384;
-  font-family: monospace;
 }
 
 .empty {
