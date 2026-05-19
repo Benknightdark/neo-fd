@@ -2,7 +2,7 @@
 import { listen } from '@tauri-apps/api/event';
 import { useVirtualList } from '@vueuse/core';
 import { onMounted, ref, shallowRef } from 'vue';
-import { type ScanResult, scannerApi } from './api/ipc';
+import { type ScanResult, scannerApi, systemApi } from './api/ipc';
 
 const scanPath = ref('');
 const isScanning = ref(false);
@@ -124,7 +124,13 @@ onMounted(async () => {
         <div v-bind="wrapperProps">
           <div v-for="item in list" :key="item.index" class="table-row" :style="{ height: '45px' }">
             <div class="col type"><span class="badge">{{ item.data.pattern_name }}</span></div>
-            <div class="col path" :title="item.data.path">{{ item.data.path }}</div>
+            <div 
+              class="col path cursor-pointer text-blue-600 hover:underline" 
+              :title="item.data.path"
+              @click="systemApi.openFile(item.data.path)"
+            >
+              {{ item.data.path }}
+            </div>
             <div class="col line">{{ item.data.line_num }}</div>
             <div class="col matched">{{ item.data.matched_text }}</div>
           </div>

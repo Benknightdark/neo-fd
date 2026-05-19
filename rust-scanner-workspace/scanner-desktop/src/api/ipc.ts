@@ -1,4 +1,5 @@
 import { invoke as tauriInvoke } from '@tauri-apps/api/core';
+import { openPath } from '@tauri-apps/plugin-opener';
 import { useNotificationStore } from '../stores/notification';
 
 /**
@@ -26,6 +27,25 @@ export async function safeInvoke<T>(
     throw new Error(message);
   }
 }
+
+/**
+ * 系統層級 API 定義
+ */
+export const systemApi = {
+  /**
+   * 使用預設應用程式開啟檔案
+   */
+  openFile: async (path: string) => {
+    try {
+      await openPath(path);
+    } catch (error) {
+      const notification = useNotificationStore();
+      const message = typeof error === 'string' ? error : JSON.stringify(error);
+      notification.add(`無法開啟檔案: ${message}`, 'warning');
+      console.error(`[Open File Error] Path: ${path}, Error:`, error);
+    }
+  },
+};
 
 /**
  * 掃描相關的 API 定義
