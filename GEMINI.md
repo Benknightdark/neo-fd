@@ -57,3 +57,16 @@ Ensure you have Rust, Cargo, and Node.js installed.
 *   **Error Handling in UI**: The CLI should not panic. TUI components must catch errors (like invalid Regex input) and display them interactively within the UI layout (e.g., in red text) rather than silently failing or crashing.
 *   **Memory Efficiency**: The `scanner-core` should maintain its optimized single-buffer reading strategy (`line_buf.clear()`) inside loops instead of allocating new `String` instances per line to prevent GC overhead when scanning large codebases or logs.
 *   **Formatting**: Always run `cargo fmt` before committing code. Code style is enforced by standard `rustfmt` rules.
+
+## Testing & Fixtures
+
+當實作新的 Rust 掃描規則（例如新增信用卡號掃描、個資掃描等）或修改核心邏輯時，您 **必須 (MUST)** 準備對應的測試資料與驗證邏輯：
+
+1.  **準備測試資料 (Fixtures)**：
+    *   請將測試用的檔案統一放置於 `rust-scanner-workspace/rust-scanner-cli/tests/data/` 目錄內。
+    *   **文字測試 (`.txt`)**：包含預期會被掃描到的「正向條件 (Positive)」與不該被掃描到的「負向條件 (Negative)」。
+    *   **二進位測試 (`.bin`)**：如果規則涉及檔案過濾，請準備二進位檔案以驗證掃描器是否能正確跳過或處理。
+2.  **撰寫測試**：
+    *   核心引擎邏輯的單元測試請寫在 `scanner-core/src/` 中。
+    *   依賴實際檔案讀取的整合測試，請寫在對應的 `tests/` 目錄，並讀取 `tests/data/` 內的 Fixtures 進行驗證。
+    *   完成後務必執行 `cargo test` 確保變更符合預期。
