@@ -70,3 +70,19 @@ Ensure you have Rust, Cargo, and Node.js installed.
     *   核心引擎邏輯的單元測試請寫在 `scanner-core/src/` 中。
     *   依賴實際檔案讀取的整合測試，請寫在對應的 `tests/` 目錄，並讀取 `tests/data/` 內的 Fixtures 進行驗證。
     *   完成後務必執行 `cargo test` 確保變更符合預期。
+
+## Release & CI/CD
+
+本專案已配置跨平台（Windows, macOS, Ubuntu）的自動化發布流程，建置產物為對應平台的安裝檔與二進位執行檔。
+
+要觸發自動發布，請遵循以下步驟：
+1. **準備發布**：確保工作區代碼已經完成開發並 `push` 至 `main` 分支。
+2. **建立版本標籤**：建立一個以 `v` 開頭的 Git 標籤。
+   ```bash
+   git tag v1.0.0
+   ```
+3. **推送標籤**：將標籤推送至 GitHub，這會自動觸發 Action 進行編譯與打包。
+   ```bash
+   git push origin v1.0.0
+   ```
+4. **驗收與發布**：前往 GitHub Repository 的 **Releases** 頁面。Actions 會自動建立一個「草稿 (Draft)」狀態的 Release。請人工檢驗安裝檔後，再點擊發布。
