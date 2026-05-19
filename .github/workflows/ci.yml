@@ -73,3 +73,7 @@ jobs:
     - name: Build & Typecheck
       working-directory: rust-scanner-workspace/scanner-desktop
       run: npm run build
+      
+    - name: Run Unit Tests
+      working-directory: rust-scanner-workspace/scanner-desktop
+      run: npm run test

@@ -14,8 +14,24 @@
 
 ## 4. Tauri IPC Communication
 - **Encapsulation**: Do NOT call `@tauri-apps/api/core` `invoke` directly from components.
-- **Convention**: Create typed wrapper functions in a dedicated `src/api` or `src/commands` module. 
-- **Error Handling**: All Rust commands must return a `Result<T, E>`. The frontend wrappers must properly catch these errors and integrate them into the UI (e.g., using a toast notification system or inline error states) rather than silently failing.
+- **Convention**: Use the `safeInvoke` wrapper located in `src/api/ipc.ts`.
+- **API Registry**: All command calls should be registered in `src/api/ipc.ts` (e.g., `scannerApi.startScan`) to provide type safety and centralized management.
+- **Error Handling**: 
+    - All Rust commands MUST return a `Result<T, E>`.
+    - The `safeInvoke` wrapper automatically logs IPC errors and re-throws them as standard `Error` objects.
+    - Components should use `try...catch` for UI-specific error feedback (e.g., toasts).
+
+### Example Usage:
+```typescript
+import { scannerApi } from '@/api/ipc';
+
+try {
+  await scannerApi.startScan(path, patterns);
+} catch (err) {
+  // Show error in UI
+  showToast((err as Error).message, 'error');
+}
+```
 
 ## 5. Tooling & Linting
 - **Linter/Formatter**: We use **Biome**. Always run `npm run lint` and `npm run format` before committing.

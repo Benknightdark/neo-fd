@@ -1,15 +1,8 @@
 <script setup lang="ts">
-import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { useVirtualList } from '@vueuse/core';
 import { onMounted, ref, shallowRef } from 'vue';
-
-interface ScanResult {
-  path: string;
-  line_num: number;
-  pattern_name: string;
-  matched_text: string;
-}
+import { type ScanResult, scannerApi } from './api/ipc';
 
 const scanPath = ref('');
 const isScanning = ref(false);
@@ -43,7 +36,7 @@ function flushBuffer() {
 async function startScan() {
   if (isScanning.value) return;
 
-  const activePatterns = selectedPatterns.value
+  const activePatterns: [string, string][] = selectedPatterns.value
     .filter((p) => p.enabled)
     .map((p) => [p.name, p.pattern]);
 
@@ -63,12 +56,9 @@ async function startScan() {
   batchTimer = window.setInterval(flushBuffer, 100);
 
   try {
-    await invoke('scan_directory', {
-      path: scanPath.value || '/',
-      patterns: activePatterns,
-    });
+    await scannerApi.startScan(scanPath.value || '/', activePatterns);
   } catch (err) {
-    alert(`掃描啟動失敗: ${err}`);
+    alert(`掃描啟動失敗: ${(err as Error).message}`);
     isScanning.value = false;
     if (batchTimer) clearInterval(batchTimer);
   }
