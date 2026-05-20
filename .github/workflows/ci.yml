@@ -225,3 +225,12 @@ jobs:
         releaseBody: "自動發布版本 ${{ steps.get_version.outputs.tag }}。請從下方下載對應系統的安裝檔。"
         releaseDraft: true
         prerelease: false
+
+    - name: Generate Auto-Release Notes
+      if: matrix.os == 'ubuntu-latest'
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        gh release edit "${{ steps.get_version.outputs.tag }}" \
+          --generate-notes \
+          --draft

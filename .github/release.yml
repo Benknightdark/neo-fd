@@ -1,0 +1,27 @@
+changelog:
+  exclude:
+    labels:
+      - ignore
+  categories:
+    - title: "🚀 Features"
+      labels:
+        - feature
+        - enhancement
+      commits:
+        - "feat:*"
+        - "feat(*):*"
+    - title: "🐛 Bug Fixes"
+      labels:
+        - bug
+        - fix
+      commits:
+        - "fix:*"
+        - "fix(*):*"
+    - title: "🧹 Chores & Performance"
+      commits:
+        - "chore:*"
+        - "perf:*"
+        - "refactor:*"
+    - title: "📝 Documentation"
+      commits:
+        - "docs:*"
