@@ -96,7 +96,7 @@ jobs:
         tagName: ${{ steps.get_version.outputs.tag }}
         releaseName: "Scanner Desktop ${{ steps.get_version.outputs.tag }}"
         releaseBody: "自動發布版本 ${{ steps.get_version.outputs.tag }}。請從下方下載對應系統的安裝檔。"
-        releaseDraft: true
+        releaseDraft: false
         prerelease: false
 
     - name: Generate Auto-Release Notes
@@ -108,7 +108,6 @@ jobs:
         # This gracefully bypasses older 'gh' CLI versions lacking '--generate-notes' flag inside the edit command.
         gh api repos/:owner/:repo/releases/generate-notes -f tag_name="${{ steps.get_version.outputs.tag }}" -q .body > release_notes.md
         
-        # Apply the generated release notes to our draft release.
+        # Apply the generated release notes to our published release.
         gh release edit "${{ steps.get_version.outputs.tag }}" \
-          --notes-file release_notes.md \
-          --draft
+          --notes-file release_notes.md
