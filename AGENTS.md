@@ -82,12 +82,12 @@ graph TD
 
 ```mermaid
 graph TD
-    subgraph 介面層 Clients (Consumers)
+    subgraph clients ["介面層 Clients (Consumers)"]
         cli["rust-scanner-cli (Ratatui TUI)"]
         desktop["scanner-desktop (Vue 3 + Tauri 2 App)"]
     end
     
-    subgraph 核心引擎 Engine (Library)
+    subgraph engine ["核心引擎 Engine (Library)"]
         core["scanner-core (Fast Engine)"]
     end
     
