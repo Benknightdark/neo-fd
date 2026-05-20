@@ -116,12 +116,15 @@ jobs:
         existing_pr=$(gh pr list --head develop --base main --state open --json number -q '.[0].number' 2>/dev/null || echo "")
         
         if [ -z "$existing_pr" ]; then
-          gh pr create \
+          if gh pr create \
             --head develop \
             --base main \
             --title "feat: merge develop into main" \
-            --body "Automated Pull Request created by GitHub Actions after successful checks on develop."
-          echo "Successfully created a new Pull Request!"
+            --body "Automated Pull Request created by GitHub Actions after successful checks on develop."; then
+            echo "Successfully created a new Pull Request!"
+          else
+            echo "::warning:: Failed to create Pull Request. Please ensure that 'Allow GitHub Actions to create and approve pull requests' is enabled in your GitHub repository settings under Settings -> Actions -> General -> Workflow permissions."
+          fi
         else
           echo "A Pull Request from develop to main already exists (PR #$existing_pr)."
         fi
