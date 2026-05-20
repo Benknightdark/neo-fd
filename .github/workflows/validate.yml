@@ -1,0 +1,120 @@
+name: Validation (PR & Develop)
+
+on:
+  push:
+    branches: [ develop ]
+  pull_request:
+    branches: [ main, master, develop ]
+
+jobs:
+  rust-checks:
+    name: Rust Checks (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Install Linux Dependencies
+      if: matrix.os == 'ubuntu-latest'
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev
+    
+    - name: Setup Rust
+      uses: dtolnay/rust-toolchain@stable
+      with:
+        components: rustfmt, clippy
+        
+    - name: Rust Cache
+      uses: Swatinem/rust-cache@v2
+      with:
+        workspaces: "rust-scanner-workspace"
+        
+    - name: Check Formatting
+      working-directory: rust-scanner-workspace
+      run: cargo fmt --check
+      
+    - name: Clippy Lints
+      working-directory: rust-scanner-workspace
+      run: cargo clippy -- -D warnings
+      
+    - name: Run Tests
+      working-directory: rust-scanner-workspace
+      run: cargo test
+
+  frontend-checks:
+    name: Frontend Checks (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+        cache: 'npm'
+        cache-dependency-path: rust-scanner-workspace/scanner-desktop/package-lock.json
+        
+    - name: Install Dependencies
+      working-directory: rust-scanner-workspace/scanner-desktop
+      run: npm ci
+      
+    - name: Lint (Biome)
+      working-directory: rust-scanner-workspace/scanner-desktop
+      run: npm run lint
+      
+    - name: Build & Typecheck
+      working-directory: rust-scanner-workspace/scanner-desktop
+      run: npm run build
+      
+    - name: Run Unit Tests
+      working-directory: rust-scanner-workspace/scanner-desktop
+      run: npm run test
+
+  create-pr:
+    name: Auto-Create Pull Request
+    needs: [rust-checks, frontend-checks]
+    if: github.ref == 'refs/heads/develop' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+      contents: read
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+        
+    - name: Compare branches and create PR
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        git fetch origin main:main || echo "main branch not loaded locally yet, continuing..."
+        diff_commits=$(git log main..develop --oneline 2>/dev/null || echo "has_diff")
+        
+        if [ -z "$diff_commits" ]; then
+          echo "No new commits on develop to merge into main. Skipping Pull Request creation."
+          exit 0
+        fi
+        
+        existing_pr=$(gh pr list --head develop --base main --state open --json number -q '.[0].number' 2>/dev/null || echo "")
+        
+        if [ -z "$existing_pr" ]; then
+          if gh pr create \
+            --head develop \
+            --base main \
+            --title "feat: merge develop into main" \
+            --body "Automated Pull Request created by GitHub Actions after successful checks on develop."; then
+            echo "Successfully created a new Pull Request!"
+          else
+            echo "::warning:: Failed to create Pull Request. Please ensure that 'Allow GitHub Actions to create and approve pull requests' is enabled in your GitHub repository settings under Settings -> Actions -> General -> Workflow permissions."
+          fi
+        else
+          echo "A Pull Request from develop to main already exists (PR #$existing_pr)."
+        fi
