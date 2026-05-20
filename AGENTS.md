@@ -134,3 +134,19 @@ graph TD
     *   **動態寫入版號**：CI 在編譯環境中會自動將新版號寫入專案根目錄的 `package.json`、`scanner-desktop` 的 `package.json` 與 `src-tauri/tauri.conf.json`。
     *   **Tauri 跨平台編譯**：在 Windows、macOS 和 Ubuntu 執行環境下平行編譯出各系統的桌面安裝檔（.msi, .dmg, .deb）。
     *   **精美分類發布說明**：使用 `gh` 終端指令，並配合專案設定的 `.github/release.yml` 模板，自動為你的 Draft Release 建立精美並帶有分類（🚀 Features, 🐛 Bug Fixes, 🧹 Chores, 📝 Documentation）的專業 Changelog。
+
+---
+
+## AI 編碼安全防禦與防閃退規範 (AI Safety & No-Panic Policy)
+
+為確保 AI 協同開發時軟體的高度穩定性，所有 AI 代理 (Agents) 必須嚴格遵守以下兩大防線：
+
+### 1. 防閃退規則 (No-Panic Rules)
+在進行 `scanner-core` 與 `rust-scanner-cli` 的開發與重構時，**嚴禁代碼中出現無保護的 `unwrap()`、`expect()`、`panic!()` 或陣列越界訪問 (Out of Bounds)**：
+*   **正則表達式防錯**：用戶輸入的自定義 regex 可能有語法錯誤。在進行正規表達式解析時，必須使用 `regex::Regex::new` 並進行 `Result` 的處理。若出錯，必須以 `Err(..)` 方式安全傳遞給 UI (CLI/Desktop)，由 UI 友好地以紅字顯示錯誤訊息，嚴禁直接 `unwrap()` 導致整個掃描程序閃退。
+*   **檔案/系統 I/O**：處理檔案讀取、目錄遍歷時，應妥善捕獲錯誤並優雅跳過或回報，不得因單一檔案損壞或權限不足導致主程序崩潰。
+
+### 2. 個資保護與測試資料防洩漏 (Data Protection Policy)
+*   **虛擬個資生成**：在新增掃描規則的測試資料時（`tests/data/`），**嚴禁使用任何真實的台灣身分證字號、真實姓名、手機號碼或信用卡號碼**。
+*   **資料合規**：測試 Fixtures 必須為符合正規格式的「虛擬產出資料」（例如使用 `A123456789` 等範例格式，或用隨機生成器產生的不具真實性個資）。
+

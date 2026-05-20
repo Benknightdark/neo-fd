@@ -4,8 +4,14 @@
   "description": "這是一個基於 Rust 開發的高效能、多執行緒檔案掃描工具。它能夠快速遍歷本機目錄，並利用正規表達式 (Regular Expression) 找出檔案中匹配的字串。專案內建了「台灣身分證字號」與「台灣十大姓氏」的掃描模式，並支援使用者輸入自定義的正規表達式。",
   "main": "commitlint.config.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
-    "prepare": "husky"
+    "test": "npm run test:all",
+    "prepare": "husky",
+    "lint:frontend": "npm run lint --prefix rust-scanner-workspace/scanner-desktop",
+    "lint:rust": "cd rust-scanner-workspace && cargo fmt --check && cargo clippy -- -D warnings",
+    "lint:all": "npm run lint:frontend && npm run lint:rust",
+    "test:frontend": "npm run test --prefix rust-scanner-workspace/scanner-desktop -- --run",
+    "test:rust": "cd rust-scanner-workspace && cargo test",
+    "test:all": "npm run test:frontend && npm run test:rust"
   },
   "repository": {
     "type": "git",
