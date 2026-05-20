@@ -1,60 +1,76 @@
+# 驗證工作流：主要用於 PR（拉取請求）與 develop 分支的程式碼品質檢查
 name: Validation (PR & Develop)
 
 on:
+  # 當有程式碼推送到 develop 分支時觸發
   push:
     branches: [ develop ]
+  # 當對 main, master, develop 分支開立 PR 時觸發
   pull_request:
     branches: [ main, master, develop ]
 
 jobs:
+  # Job 1：執行 Rust 程式碼檢查與測試
   rust-checks:
     name: Rust Checks (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
+    # 策略矩陣：同時在 Linux、Windows 與 macOS 上平行執行
     strategy:
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
     
     steps:
+    # 步驟 1：檢出專案程式碼
     - uses: actions/checkout@v4
     
+    # 步驟 2：如果是 Linux 環境，安裝 Tauri 2.0 所需的系統相依套件
     - name: Install Linux Dependencies
       if: matrix.os == 'ubuntu-latest'
       run: |
         sudo apt-get update
         sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev
     
+    # 步驟 3：安裝 Rust 工具鏈（包含編譯器、格式化工具與 Clippy 靜態檢查）
     - name: Setup Rust
       uses: dtolnay/rust-toolchain@stable
       with:
         components: rustfmt, clippy
         
+    # 步驟 4：設定 Rust 快取，用來加速後續運行的編譯時間
     - name: Rust Cache
       uses: Swatinem/rust-cache@v2
       with:
         workspaces: "rust-scanner-workspace"
         
+    # 步驟 5：檢查程式碼格式是否符合規範（cargo fmt）
     - name: Check Formatting
       working-directory: rust-scanner-workspace
       run: cargo fmt --check
       
+    # 步驟 6：使用 Clippy 進行程式碼靜態分析（若有警告則報錯失敗）
     - name: Clippy Lints
       working-directory: rust-scanner-workspace
       run: cargo clippy -- -D warnings
       
+    # 步驟 7：運行 Rust 核心庫與 CLI 的單元與整合測試
     - name: Run Tests
       working-directory: rust-scanner-workspace
       run: cargo test
 
+  # Job 2：執行前端（Tauri Desktop Vue 3）程式碼檢查與測試
   frontend-checks:
     name: Frontend Checks (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
+    # 策略矩陣：同時在三平台平行執行
     strategy:
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
         
     steps:
+    # 步驟 1：檢出專案程式碼
     - uses: actions/checkout@v4
     
+    # 步驟 2：設定 Node.js 執行環境並啟用 npm 相依快取
     - name: Setup Node.js
       uses: actions/setup-node@v4
       with:
@@ -62,49 +78,62 @@ jobs:
         cache: 'npm'
         cache-dependency-path: rust-scanner-workspace/scanner-desktop/package-lock.json
         
+    # 步驟 3：乾淨安裝前端相依套件
     - name: Install Dependencies
       working-directory: rust-scanner-workspace/scanner-desktop
       run: npm ci
       
+    # 步驟 4：執行 Biome 進行前端語法靜態檢查與格式化驗證
     - name: Lint (Biome)
       working-directory: rust-scanner-workspace/scanner-desktop
       run: npm run lint
       
+    # 步驟 5：進行打包編譯與 TypeScript 型別安全檢查
     - name: Build & Typecheck
       working-directory: rust-scanner-workspace/scanner-desktop
       run: npm run build
       
+    # 步驟 6：執行 Vitest 前端單元測試
     - name: Run Unit Tests
       working-directory: rust-scanner-workspace/scanner-desktop
       run: npm run test
 
+  # Job 3：自動建立 Pull Request (僅在 develop 分支有成功 push 時運行)
   create-pr:
     name: Auto-Create Pull Request
-    needs: [rust-checks, frontend-checks]
+    needs: [rust-checks, frontend-checks] # 必須等 Rust 和前端的所有檢查都完全綠燈才執行
     if: github.ref == 'refs/heads/develop' && github.event_name == 'push'
     runs-on: ubuntu-latest
     permissions:
-      pull-requests: write
-      contents: read
+      pull-requests: write # 需要寫入權限來建立 PR
+      contents: read       # 需要讀取權限來比較分支
     steps:
+    # 步驟 1：檢出完整 Git 歷史紀錄（fetch-depth: 0 是為了能進行分支比對）
     - uses: actions/checkout@v4
       with:
         fetch-depth: 0
         
+    # 步驟 2：比對 develop 與 main，若有新提交且目前無開啟中的 PR，則自動建立 PR
     - name: Compare branches and create PR
       env:
         GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
+        # 1. 抓取遠端的 main 分支歷史
         git fetch origin main:main || echo "main branch not loaded locally yet, continuing..."
+        
+        # 2. 比對 develop 分支領先 main 分支多少提交
         diff_commits=$(git log main..develop --oneline 2>/dev/null || echo "has_diff")
         
+        # 3. 如果兩分支完全一致，則跳過 PR 建立
         if [ -z "$diff_commits" ]; then
           echo "No new commits on develop to merge into main. Skipping Pull Request creation."
           exit 0
         fi
         
+        # 4. 查詢目前是否已經有從 develop 合併到 main 的開啟中 PR
         existing_pr=$(gh pr list --head develop --base main --state open --json number -q '.[0].number' 2>/dev/null || echo "")
         
+        # 5. 若無既存 PR，則呼叫 GitHub CLI 自動建立 PR，並加上防呆權限警告
         if [ -z "$existing_pr" ]; then
           if gh pr create \
             --head develop \
