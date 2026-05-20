@@ -2,10 +2,10 @@ name: CI
 
 on:
   push:
-    branches: [ main, master ]
+    branches: [ main, master, develop ]
     tags: [ 'v*' ]
   pull_request:
-    branches: [ main, master ]
+    branches: [ main, master, develop ]
 
 jobs:
   rust-checks:
@@ -82,7 +82,10 @@ jobs:
   release:
     name: Build & Release CD
     needs: [rust-checks, frontend-checks]
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: |
+      startsWith(github.ref, 'refs/tags/v') ||
+      github.ref == 'refs/heads/main' ||
+      github.ref == 'refs/heads/master'
     runs-on: ${{ matrix.os }}
     permissions:
       contents: write
@@ -92,7 +95,59 @@ jobs:
         
     steps:
     - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
     
+    - name: Bump version and push tag
+      id: tag_version
+      if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
+      uses: mathieudutour/github-tag-action@v6.2
+      with:
+        github_token: ${{ secrets.GITHUB_TOKEN }}
+        default_bump: patch
+
+    - name: Determine Tag and Version
+      id: get_version
+      shell: bash
+      run: |
+        if [ "${{ github.ref_type }}" = "tag" ]; then
+          echo "tag=${{ github.ref_name }}" >> $GITHUB_OUTPUT
+          version=$(echo "${{ github.ref_name }}" | sed 's/^v//')
+          echo "version=${version}" >> $GITHUB_OUTPUT
+        else
+          echo "tag=${{ steps.tag_version.outputs.new_tag }}" >> $GITHUB_OUTPUT
+          echo "version=${{ steps.tag_version.outputs.new_version }}" >> $GITHUB_OUTPUT
+        fi
+
+    - name: Sync Workspace Configurations
+      shell: node {0}
+      run: |
+        const fs = require('fs');
+        const newVer = '${{ steps.get_version.outputs.version }}';
+        
+        // Update root package.json
+        const rootPkgPath = 'package.json';
+        if (fs.existsSync(rootPkgPath)) {
+          const rootPkg = JSON.parse(fs.readFileSync(rootPkgPath, 'utf8'));
+          rootPkg.version = newVer;
+          fs.writeFileSync(rootPkgPath, JSON.stringify(rootPkg, null, 2) + '\n');
+          console.log(`Updated root package.json version to: ${newVer}`);
+        }
+        
+        // Update scanner-desktop/package.json
+        const pkgPath = 'rust-scanner-workspace/scanner-desktop/package.json';
+        const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
+        pkg.version = newVer;
+        fs.writeFileSync(pkgPath, JSON.stringify(pkg, null, 2) + '\n');
+        console.log(`Updated package.json version to: ${newVer}`);
+        
+        // Update scanner-desktop/src-tauri/tauri.conf.json
+        const tauriPath = 'rust-scanner-workspace/scanner-desktop/src-tauri/tauri.conf.json';
+        const tauri = JSON.parse(fs.readFileSync(tauriPath, 'utf8'));
+        tauri.version = newVer;
+        fs.writeFileSync(tauriPath, JSON.stringify(tauri, null, 2) + '\n');
+        console.log(`Updated tauri.conf.json version to: ${newVer}`);
+
     - name: Setup Node.js
       uses: actions/setup-node@v4
       with:
@@ -119,8 +174,8 @@ jobs:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       with:
         projectPath: rust-scanner-workspace/scanner-desktop
-        tagName: ${{ github.ref_name }}
-        releaseName: "Scanner Desktop ${{ github.ref_name }}"
-        releaseBody: "自動發布版本 ${{ github.ref_name }}。請從下方下載對應系統的安裝檔。"
+        tagName: ${{ steps.get_version.outputs.tag }}
+        releaseName: "Scanner Desktop ${{ steps.get_version.outputs.tag }}"
+        releaseBody: "自動發布版本 ${{ steps.get_version.outputs.tag }}。請從下方下載對應系統的安裝檔。"
         releaseDraft: true
         prerelease: false
