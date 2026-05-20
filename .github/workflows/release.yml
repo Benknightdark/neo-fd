@@ -104,6 +104,11 @@ jobs:
       env:
         GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
+        # Generate beautiful release notes (matching .github/release.yml categorizations) and write to a temporary file.
+        # This gracefully bypasses older 'gh' CLI versions lacking '--generate-notes' flag inside the edit command.
+        gh api repos/:owner/:repo/releases/generate-notes -f tag_name="${{ steps.get_version.outputs.tag }}" -q .body > release_notes.md
+        
+        # Apply the generated release notes to our draft release.
         gh release edit "${{ steps.get_version.outputs.tag }}" \
-          --generate-notes \
+          --notes-file release_notes.md \
           --draft
