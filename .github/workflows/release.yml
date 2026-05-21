@@ -1,25 +1,33 @@
+# 發布與部署工作流 (CD)：主要用於正式上線打包與 Release 發布
 name: Release & Deployment (CD)
 
 on:
+  # 當程式碼推送到 main 或 master 分支時觸發（例如 PR 合併時）
   push:
     branches: [ main, master ]
+    # 當手動推送版本標籤（如 v1.3.0）時亦會觸發
     tags: [ 'v*' ]
 
 jobs:
+  # 發布 Job：負責跨平台編譯 Tauri 安裝檔與發布 GitHub Release
   release:
     name: Build & Release CD
     runs-on: ${{ matrix.os }}
+    # 給予寫入內容的權限，以便建立 Tag、上傳 Release 物件
     permissions:
       contents: write
+    # 策略矩陣：平行在 Linux、Windows 與 macOS 上打包編譯
     strategy:
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
         
     steps:
+    # 步驟 1：檢出完整 Git 歷史紀錄（以便計算自動版號與產生變更日誌）
     - uses: actions/checkout@v4
       with:
         fetch-depth: 0
     
+    # 步驟 2：如果是直接推送到 main/master，則自動計算語意化版號並推送新 Git Tag
     - name: Bump version and push tag
       id: tag_version
       if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
@@ -28,6 +36,7 @@ jobs:
         github_token: ${{ secrets.GITHUB_TOKEN }}
         default_bump: patch
 
+    # 步驟 3：判定最終要使用的 Tag 與 Version。如果是手動推 Tag 則直接使用該 Tag 名稱
     - name: Determine Tag and Version
       id: get_version
       shell: bash
@@ -41,12 +50,14 @@ jobs:
           echo "version=${{ steps.tag_version.outputs.new_version }}" >> $GITHUB_OUTPUT
         fi
 
+    # 步驟 4：使用 Node.js 動態將最新版號同步寫入 package.json 與 tauri.conf.json
     - name: Sync Workspace Configurations
       shell: node {0}
       run: |
         const fs = require('fs');
         const newVer = '${{ steps.get_version.outputs.version }}';
         
+        // 1. 同步根目錄 package.json
         const rootPkgPath = 'package.json';
         if (fs.existsSync(rootPkgPath)) {
           const rootPkg = JSON.parse(fs.readFileSync(rootPkgPath, 'utf8'));
@@ -55,18 +66,21 @@ jobs:
           console.log(`Updated root package.json version to: ${newVer}`);
         }
         
+        // 2. 同步桌面端 package.json
         const pkgPath = 'rust-scanner-workspace/scanner-desktop/package.json';
         const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
         pkg.version = newVer;
         fs.writeFileSync(pkgPath, JSON.stringify(pkg, null, 2) + '\n');
         console.log(`Updated package.json version to: ${newVer}`);
         
+        // 3. 同步 Tauri 設定檔 tauri.conf.json
         const tauriPath = 'rust-scanner-workspace/scanner-desktop/src-tauri/tauri.conf.json';
         const tauri = JSON.parse(fs.readFileSync(tauriPath, 'utf8'));
         tauri.version = newVer;
         fs.writeFileSync(tauriPath, JSON.stringify(tauri, null, 2) + '\n');
         console.log(`Updated tauri.conf.json version to: ${newVer}`);
 
+    # 步驟 5：設定 Node.js 執行環境
     - name: Setup Node.js
       uses: actions/setup-node@v4
       with:
@@ -74,19 +88,23 @@ jobs:
         cache: 'npm'
         cache-dependency-path: rust-scanner-workspace/scanner-desktop/package-lock.json
         
+    # 步驟 6：設定 Rust 工具鏈
     - name: Setup Rust
       uses: dtolnay/rust-toolchain@stable
       
+    # 步驟 7：若是 Linux 環境，安裝 Tauri 編譯所需的 Linux 相依套件
     - name: Install Linux Dependencies
       if: matrix.os == 'ubuntu-latest'
       run: |
         sudo apt-get update
         sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev
         
+    # 步驟 8：安裝前端打包所需的 npm 套件
     - name: Install Frontend Dependencies
       working-directory: rust-scanner-workspace/scanner-desktop
       run: npm ci
 
+    # 步驟 9：編譯跨平台 Tauri 桌面安裝包並直接公開發布 (Tauri Action 會自動上傳二進位檔)
     - name: Build and Publish Tauri Release
       uses: tauri-apps/tauri-action@v0
       env:
@@ -94,20 +112,21 @@ jobs:
       with:
         projectPath: rust-scanner-workspace/scanner-desktop
         tagName: ${{ steps.get_version.outputs.tag }}
-        releaseName: "Scanner Desktop ${{ steps.get_version.outputs.tag }}"
+        releaseName: "Neo FD ${{ steps.get_version.outputs.tag }}"
         releaseBody: "自動發布版本 ${{ steps.get_version.outputs.tag }}。請從下方下載對應系統的安裝檔。"
-        releaseDraft: false
+        releaseDraft: false # 直接公開發布，不存為草稿
         prerelease: false
 
+    # 步驟 10：產生精美分類的自動變更日誌 (Changelog) 並寫入發布頁面 (僅由 Linux 執行一次防止競爭)
     - name: Generate Auto-Release Notes
       if: matrix.os == 'ubuntu-latest'
       env:
         GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
-        # Generate beautiful release notes (matching .github/release.yml categorizations) and write to a temporary file.
-        # This gracefully bypasses older 'gh' CLI versions lacking '--generate-notes' flag inside the edit command.
+        # 1. 呼叫 GitHub REST API 根據 .github/release.yml 的分類設定產生 Markdown 變更日誌，並導出至暫存檔
+        # 此寫法對所有 GitHub CLI (gh) 版本皆有 100% 相容性，完美避開舊版 CLI 不支援 --generate-notes 的 Bug
         gh api repos/:owner/:repo/releases/generate-notes -f tag_name="${{ steps.get_version.outputs.tag }}" -q .body > release_notes.md
         
-        # Apply the generated release notes to our published release.
+        # 2. 將產生的變更日誌編輯寫入這個已發布的公開 Release 中
         gh release edit "${{ steps.get_version.outputs.tag }}" \
           --notes-file release_notes.md
