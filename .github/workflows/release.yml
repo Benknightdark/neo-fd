@@ -112,7 +112,7 @@ jobs:
       with:
         projectPath: rust-scanner-workspace/scanner-desktop
         tagName: ${{ steps.get_version.outputs.tag }}
-        releaseName: "Scanner Desktop ${{ steps.get_version.outputs.tag }}"
+        releaseName: "Neo FD ${{ steps.get_version.outputs.tag }}"
         releaseBody: "自動發布版本 ${{ steps.get_version.outputs.tag }}。請從下方下載對應系統的安裝檔。"
         releaseDraft: false # 直接公開發布，不存為草稿
         prerelease: false
