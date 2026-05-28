@@ -3,14 +3,16 @@ import { openPath } from '@tauri-apps/plugin-opener';
 import { useNotificationStore } from '../stores/notification';
 
 /**
- * 定義標準 Tauri 介面合約，確保前端與後端強烈綁定
+ * 定義與 Rust 後端綁定的強型別 Tauri 指令契約
  */
 export interface TauriCommands {
+  // 啟動目錄掃描
   scan_directory: {
     args: { path: string; patterns: [string, string][] };
-    // biome-ignore lint/suspicious/noConfusingVoidType: void is appropriate for representing a command with no return value
+    // biome-ignore lint/suspicious/noConfusingVoidType: void represents command without return value
     return: void;
   };
+  // 讀取指定檔案內容
   read_file_content: {
     args: { path: string };
     return: string;
@@ -18,7 +20,7 @@ export interface TauriCommands {
 }
 
 /**
- * 健全的錯誤格式化工具，解決 JSON.stringify(Error) => "{}" 的問題
+ * 格式化與標準化各種類型的錯誤訊息，確保錯誤可見度
  */
 export function formatError(error: unknown): string {
   if (typeof error === 'string') {
@@ -38,10 +40,8 @@ export function formatError(error: unknown): string {
 }
 
 /**
- * 標準 IPC 呼叫封裝 (型別安全版)
- *
- * 此工具統一處理來自 Rust 的 Result<T, E>。
- * 如果 Rust 傳回 Err，會自動發送通知到全域 Store 並拋出 Exception。
+ * 強型別安全的 Tauri IPC 呼叫代理
+ * 自動攔截執行時異常並派送 Toast 全域通知，防止程序崩潰
  */
 export async function safeInvoke<K extends keyof TauriCommands>(
   command: K,
@@ -51,12 +51,10 @@ export async function safeInvoke<K extends keyof TauriCommands>(
     return await tauriInvoke<TauriCommands[K]['return']>(command, args);
   } catch (error) {
     const notification = useNotificationStore();
-    console.error(`[IPC Error] Command: ${command}, Error:`, error);
+    console.error(`[IPC 呼叫失敗] 指令: ${command}, 錯誤詳情:`, error);
 
-    // 格式化錯誤訊息
+    // 格式化並派送 Toast 視覺警告
     const message = formatError(error);
-
-    // 自動發送錯誤通知
     notification.add(`系統錯誤: ${message}`, 'error');
 
     throw new Error(message);
@@ -64,11 +62,11 @@ export async function safeInvoke<K extends keyof TauriCommands>(
 }
 
 /**
- * 系統層級 API 定義
+ * 系統層級的桌面整合 API 封裝
  */
 export const systemApi = {
   /**
-   * 使用預設應用程式開啟檔案
+   * 呼叫作業系統預設應用程式開啟指定檔案
    */
   openFile: async (path: string) => {
     try {
@@ -77,23 +75,28 @@ export const systemApi = {
       const notification = useNotificationStore();
       const message = formatError(error);
       notification.add(`無法開啟檔案: ${message}`, 'warning');
-      console.error(`[Open File Error] Path: ${path}, Error:`, error);
+      console.error(`[外部開啟失敗] 路徑: ${path}, 錯誤詳情:`, error);
     }
   },
 };
 
 /**
- * 掃描相關的 API 定義
+ * 掃描匹配結果的強型別資料結構
  */
 export interface ScanResult {
-  path: string;
-  line_num: number;
-  pattern_name: string;
-  matched_text: string;
+  path: string; // 檔案路徑
+  line_num: number; // 匹配行號
+  pattern_name: string; // 比對規則名稱
+  matched_text: string; // 敏感字串片段
 }
 
+/**
+ * 掃描業務領域 IPC 介面
+ */
 export const scannerApi = {
+  // 開始目錄掃描
   startScan: (path: string, patterns: [string, string][]) =>
     safeInvoke('scan_directory', { path, patterns }),
+  // 載入特定檔案內容以供 Code Viewer 渲染
   readFileContent: (path: string) => safeInvoke('read_file_content', { path }),
 };

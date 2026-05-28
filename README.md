@@ -1,19 +1,19 @@
 # Neo FD
 
-這是一個基於 Rust 開發的高效能、多執行緒檔案掃描工具。它能夠快速遍歷本機目錄，並利用正規表達式 (Regular Expression) 找出檔案中匹配的字串。專案內建了「台灣身分證字號」與「台灣十大姓氏」的掃描模式，並支援使用者輸入自定義的正規表達式。
+基於 Rust 開發的高效能、多執行緒檔案掃描工具。支援快速遍歷目錄，並利用正規表達式 (Regular Expression) 比對檔案內容。內建「台灣身分證字號」與「台灣十大姓氏」掃描，且支援自定義正規表達式。
 
 ## 專案特色
 
-*   **多平台支援**：提供終端機介面 (TUI) 與現代化的桌面介面 (GUI/Tauri)。
-*   **高效能多執行緒**：底層採用 `ignore` crate（與 `ripgrep` 相同底層），支援極速的平行目錄走訪。
-*   **記憶體零浪費**：核心引擎採用「單一 Buffer」重複讀取策略，在掃描超大檔案時能大幅降低記憶體分配與 GC 開銷。
-*   **智慧過濾**：自動尊重並套用 `.gitignore` 的排除規則，同時靜默跳過二進位或非 UTF-8 編碼的檔案，確保掃描過程穩定不中斷。
-*   **互動式介面**：無論是 TUI 還是 GUI，皆提供直覺的互動體驗，包含即時的正規表達式語法錯誤檢查。
-*   **模組化架構**：核心掃描引擎被獨立抽離為 `scanner-core` Library，可輕鬆被其他 Rust 專案（如 Web 伺服器、CLI 或 GUI 應用）整合。
+*   **雙介面支援**：提供終端機介面 (TUI) 與桌面介面 (GUI/Tauri)。
+*   **極速平行掃描**：底層採用與 `ripgrep` 相同的 `ignore` crate，支援高效平行目錄走訪。
+*   **零記憶體浪費**：引擎採用單一 Buffer 重複讀取，避免在大檔案掃描時頻繁分配記憶體。
+*   **智慧過濾**：自動套用 `.gitignore` 排除規則，並跳過二進位與非 UTF-8 檔案，確保穩定執行。
+*   **即時錯誤檢查**：互動式介面提供即時的正規表達式語法驗證。
+*   **模組化設計**：核心引擎為獨立的 `scanner-core` Library，便於整合至其他 Rust 應用（如 Web 伺服器、CLI 或 GUI）。
 
 ## 目錄結構
 
-本專案採用 Cargo Workspace 架構，將核心邏輯與命令列介面徹底解耦：
+採用 Cargo Workspace 架構，核心邏輯與介面層徹底解耦：
 
 ```text
 rust-scanner-workspace/
@@ -26,7 +26,7 @@ rust-scanner-workspace/
 
 ## 安裝與執行
 
-請確保您的系統已安裝 Rust、Cargo (Edition 2024) 與 Node.js。
+請確保系統已安裝 Rust、Cargo (Edition 2024) 與 Node.js。
 
 ### 1. 啟動互動式 CLI (TUI)
 
@@ -45,39 +45,39 @@ npm run tauri dev
 
 ### 3. 編譯 Release 執行檔 (CLI)
 
-若要獲得最佳的掃描效能並產生獨立的執行檔，請執行：
+若要獲得最佳的掃描效能並產生獨立執行檔：
 
 ```bash
 cd rust-scanner-workspace
 cargo build --release --bin rust-scanner-cli
 ```
 
-編譯完成後，執行檔將位於：
+編譯後執行檔位於：
 `rust-scanner-workspace/target/release/rust-scanner-cli`
 
 ### 4. 編譯 Release 執行檔 (Desktop)
 
-若要編譯桌面應用程式的生產環境版本 (包含安裝包)，請執行：
+若要編譯桌面應用程式安裝檔：
 
 ```bash
 cd rust-scanner-workspace/scanner-desktop
 npm run tauri build
 ```
 
-編譯完成後的安裝檔 (如 .app, .dmg, .msi, .deb 等) 將位於：
+安裝檔（.msi, .exe 等）將位於：
 `rust-scanner-workspace/scanner-desktop/src-tauri/target/release/bundle/`
 
 
-## 如何將核心引擎整合至其他專案？
+## 整合核心引擎
 
-如果您有其他 Rust 專案需要使用這個高效能的掃描引擎，只需在該專案的 `Cargo.toml` 中加入本地相依路徑：
+在其他 Rust 專案的 `Cargo.toml` 中加入相依路徑：
 
 ```toml
 [dependencies]
 scanner-core = { path = "../rust-scanner-workspace/scanner-core" }
 ```
 
-接著在您的程式碼中呼叫：
+接著在程式碼中呼叫：
 
 ```rust
 use scanner_core::Scanner;
@@ -96,8 +96,8 @@ fn main() {
 }
 ```
 
-## 開發與貢獻
+## 開發規範
 
-*   **格式化**：提交程式碼前請執行 `cargo fmt`。
-*   **靜態檢查**：請確保 `cargo clippy` 沒有出現警告。
-*   **核心原則**：TUI 介面不應發生 Panic，須優雅處理使用者的錯誤輸入；核心引擎需保持記憶體操作的極簡化。
+*   **格式化**：提交前請執行 `cargo fmt`。
+*   **靜態檢查**：確保 `cargo clippy` 無警告。
+*   **核心原則**：TUI 介面禁止 Panic，須妥善處理錯誤輸入；核心引擎保持零記憶體分配。
