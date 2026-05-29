@@ -187,8 +187,8 @@ graph TD
 ### 3. Git Commit 嚴格規範
 所有 Commit 訊息須符合 Conventional Commits 1.0.0 規範：
 *   **格式**：`<type>[optional scope]: <description>`
-*   **範例**：`feat(core): implement robust pattern matching for custom regex`
 *   **⚠️ 禁止**：每個 Commit 僅包含單一邏輯，禁止混入無關修改。
+*   所有的 訊息都必須是正體中文
 
 ---
 

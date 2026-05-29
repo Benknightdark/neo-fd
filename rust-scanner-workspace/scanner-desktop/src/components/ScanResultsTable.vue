@@ -1,15 +1,17 @@
 <script setup lang="ts">
 import { useVirtualList } from '@vueuse/core';
+import { storeToRefs } from 'pinia';
 import type { ScanResult } from '../api/ipc';
 import { useScanStore } from '../stores/scan';
 
 const store = useScanStore();
+const { results } = storeToRefs(store);
 
 // 宣告開口事件：當使用者點擊結果檔案時，發送該洩漏項目給父元件以開啟抽屜
 const emit = defineEmits<(e: 'open-drawer', result: ScanResult) => void>();
 
 // 註冊高性能虛擬滾動列表 (Virtual Scroll)，在超大型資料下能大幅降低 DOM 節點渲染開銷
-const { list, containerProps, wrapperProps } = useVirtualList(store.results, {
+const { list, containerProps, wrapperProps } = useVirtualList(results, {
   itemHeight: 45, // 固定單行高度以供虛擬滾動計算
 });
 </script>
@@ -19,7 +21,7 @@ const { list, containerProps, wrapperProps } = useVirtualList(store.results, {
     <header class="content-header">
       <div class="header-info">
         <h1>掃描結果</h1>
-        <span class="count-badge">{{ store.results.length }}</span>
+        <span class="count-badge">{{ results.length }}</span>
       </div>
     </header>
 
@@ -52,9 +54,9 @@ const { list, containerProps, wrapperProps } = useVirtualList(store.results, {
           <div class="col matched">{{ item.data.matched_text }}</div>
         </div>
       </div>
-      
+
       <div
-        v-if="store.results.length === 0 && !store.isScanning"
+        v-if="results.length === 0 && !store.isScanning"
         class="empty-state"
       >
         <div class="empty-icon">📁</div>

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { storeToRefs } from 'pinia';
 import { computed, nextTick, ref, watch } from 'vue';
 import { type ScanResult, scannerApi, systemApi } from '../api/ipc';
 import { useScanStore } from '../stores/scan';
@@ -13,6 +14,7 @@ const props = defineProps<{
 const emit = defineEmits<(e: 'close') => void>();
 
 const store = useScanStore();
+const { results } = storeToRefs(store);
 
 // 本地元件渲染狀態
 const isLoadingFile = ref(false);
@@ -22,11 +24,12 @@ const drawerMatchedText = ref('');
 const drawerActiveMatchIndex = ref(0);
 const drawerLines = ref<string[]>([]);
 const drawerError = ref('');
+const codeViewerRef = ref<HTMLElement | null>(null);
 
 // 計算屬性：篩選出當前開啟檔案的所有個資洩漏點，並依據行號遞增排序
 const activeFileMatches = computed(() => {
   if (!drawerPath.value) return [];
-  return [...store.results]
+  return [...results.value]
     .filter((r) => r.path === drawerPath.value)
     .sort((a, b) => a.line_num - b.line_num);
 });
@@ -64,19 +67,22 @@ async function loadFileContent(result: ScanResult) {
 
 // 平滑滾動視窗定位，將金色高亮行置於容器正中央
 function scrollToActiveLine() {
-  const targetElement = document.querySelector('.highlight-line');
+  const targetElement = codeViewerRef.value?.querySelector('.highlight-line');
   if (targetElement) {
     targetElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
   }
 }
 
-// 監聽抽屜開啟狀態：開啟時加載檔案，關閉時延遲清理本地狀態以完成淡出動畫
+// 監聽抽屜開啟狀態與目前結果：支援首次開啟、已開啟時切換結果，以及關閉後延遲清理
 watch(
-  () => props.isOpen,
-  async (newVal) => {
-    if (newVal && props.activeResult) {
-      await loadFileContent(props.activeResult);
-    } else {
+  () => [props.isOpen, props.activeResult] as const,
+  async ([isOpen, result], [wasOpen, previousResult]) => {
+    if (isOpen && result && (!wasOpen || result !== previousResult)) {
+      await loadFileContent(result);
+      return;
+    }
+
+    if (!isOpen) {
       setTimeout(() => {
         if (!props.isOpen) {
           drawerLines.value = [];
@@ -250,8 +256,8 @@ function startResize(e: MouseEvent) {
               </button>
             </div>
           </div>
-          
-          <div class="code-viewer">
+
+          <div ref="codeViewerRef" class="code-viewer">
             <div
               v-for="(line, index) in drawerLines"
               :key="index"
