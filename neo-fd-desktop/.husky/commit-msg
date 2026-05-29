@@ -1,4 +1,1 @@
-#!/usr/bin/env sh
-. "$(dirname -- "$0")/_/husky.sh"
-
 npx --prefix neo-fd-desktop --no -- commitlint --cwd neo-fd-desktop --edit "$1"
