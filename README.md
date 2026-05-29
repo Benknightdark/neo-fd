@@ -30,7 +30,9 @@ neo-fd/
 
 ## 安裝與執行
 
-請確保系統已安裝 Rust、Cargo (Edition 2024) 與 Node.js。
+本專案已將所有前端、Tauri 後端與相關相依工具鏈（Husky、Commitlint、Linter）全數收攏至 `neo-fd-desktop/` 目錄中，根目錄保持 100% 純淨。**請確保所有的 npm 相依安裝、開發生產指令，均於 `neo-fd-desktop/` 目錄內執行。**
+
+請確保系統已安裝 Rust、Cargo 與 Node.js。
 
 ### 1. 啟動桌面應用程式 (GUI)
 
@@ -53,8 +55,10 @@ npm run tauri build
 `target/release/bundle/`
 
 
-## 開發規範
+## 開發與品質規範
 
-*   **格式化**：提交前請執行 `cargo fmt`。
-*   **靜態檢查**：確保 `cargo clippy` 無警告。
-*   **核心原則**：桌面介面與 IPC 層須妥善處理錯誤輸入，絕不 Panic；核心引擎保持零記憶體分配。
+本專案所有的品質管控指令皆已整合並收攏至 `neo-fd-desktop` 中：
+*   **全域靜態檢查**：提交前請在 `neo-fd-desktop` 目錄下執行 `npm run lint:all`（進行前端 Biome 與後端 Rust fmt/clippy 檢查）。
+*   **單元測試驗證**：請在 `neo-fd-desktop` 目錄下執行 `npm run test:all` 執行所有前端 Vitest 與後端 Cargo 測試。
+*   **核心原則**：桌面介面與 IPC 層須妥善處理錯誤輸入，絕不 Panic；後端引擎保持零記憶體分配。
+

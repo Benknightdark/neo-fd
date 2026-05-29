@@ -73,16 +73,6 @@ jobs:
       run: |
         const fs = require('fs');
         const newVer = '${{ needs.prepare.outputs.version }}';
-        
-        // 1. 同步根目錄 package.json
-        const rootPkgPath = 'package.json';
-        if (fs.existsSync(rootPkgPath)) {
-          const rootPkg = JSON.parse(fs.readFileSync(rootPkgPath, 'utf8'));
-          rootPkg.version = newVer;
-          fs.writeFileSync(rootPkgPath, JSON.stringify(rootPkg, null, 2) + '\n');
-          console.log(`Updated root package.json version to: ${newVer}`);
-        }
-        
         // 2. 同步桌面端 package.json
         const pkgPath = 'neo-fd-desktop/package.json';
         const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
