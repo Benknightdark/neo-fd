@@ -203,7 +203,7 @@ function startResize(e: MouseEvent) {
 
 // 新增：綁定編輯器 DOM 控制
 const lineNumbersRef = ref<HTMLElement | null>(null);
-const textareaRef = ref<HTMLElement | null>(null);
+const textareaRef = ref<HTMLTextAreaElement | null>(null);
 
 // 新增：即時計算編輯狀態下的總行數
 const editedLinesCount = computed(() => {
