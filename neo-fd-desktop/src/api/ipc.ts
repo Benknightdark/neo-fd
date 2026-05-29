@@ -17,6 +17,18 @@ export interface TauriCommands {
     args: { path: string };
     return: string;
   };
+  // 寫入指定檔案內容
+  write_file_content: {
+    args: { path: string; content: string };
+    // biome-ignore lint/suspicious/noConfusingVoidType: void represents command without return value
+    return: void;
+  };
+  // 刪除指定檔案
+  delete_file: {
+    args: { path: string };
+    // biome-ignore lint/suspicious/noConfusingVoidType: void represents command without return value
+    return: void;
+  };
 }
 
 /**
@@ -99,4 +111,9 @@ export const scannerApi = {
     safeInvoke('scan_directory', { path, patterns }),
   // 載入特定檔案內容以供 Code Viewer 渲染
   readFileContent: (path: string) => safeInvoke('read_file_content', { path }),
+  // 寫入檔案內容以進行修正
+  writeFileContent: (path: string, content: string) =>
+    safeInvoke('write_file_content', { path, content }),
+  // 永久刪除洩漏檔案
+  deleteFile: (path: string) => safeInvoke('delete_file', { path }),
 };

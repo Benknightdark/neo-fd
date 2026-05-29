@@ -73,25 +73,15 @@ jobs:
       run: |
         const fs = require('fs');
         const newVer = '${{ needs.prepare.outputs.version }}';
-        
-        // 1. 同步根目錄 package.json
-        const rootPkgPath = 'package.json';
-        if (fs.existsSync(rootPkgPath)) {
-          const rootPkg = JSON.parse(fs.readFileSync(rootPkgPath, 'utf8'));
-          rootPkg.version = newVer;
-          fs.writeFileSync(rootPkgPath, JSON.stringify(rootPkg, null, 2) + '\n');
-          console.log(`Updated root package.json version to: ${newVer}`);
-        }
-        
         // 2. 同步桌面端 package.json
-        const pkgPath = 'rust-scanner-workspace/scanner-desktop/package.json';
+        const pkgPath = 'neo-fd-desktop/package.json';
         const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
         pkg.version = newVer;
         fs.writeFileSync(pkgPath, JSON.stringify(pkg, null, 2) + '\n');
         console.log(`Updated package.json version to: ${newVer}`);
         
         // 3. 同步 Tauri 設定檔 tauri.conf.json
-        const tauriPath = 'rust-scanner-workspace/scanner-desktop/src-tauri/tauri.conf.json';
+        const tauriPath = 'neo-fd-desktop/src-tauri/tauri.conf.json';
         const tauri = JSON.parse(fs.readFileSync(tauriPath, 'utf8'));
         tauri.version = newVer;
         fs.writeFileSync(tauriPath, JSON.stringify(tauri, null, 2) + '\n');
@@ -103,7 +93,7 @@ jobs:
       with:
         node-version: '20'
         cache: 'npm'
-        cache-dependency-path: rust-scanner-workspace/scanner-desktop/package-lock.json
+        cache-dependency-path: neo-fd-desktop/package-lock.json
         
     # 步驟 4：設定 Rust 工具鏈
     - name: Setup Rust
@@ -118,7 +108,7 @@ jobs:
         
     # 步驟 6：安裝前端打包所需的 npm 套件
     - name: Install Frontend Dependencies
-      working-directory: rust-scanner-workspace/scanner-desktop
+      working-directory: neo-fd-desktop
       run: npm ci
 
     # 步驟 7：編譯跨平台 Tauri 桌面安裝包並上傳至 Draft Release (Tauri Action 會自動上傳二進位檔)
@@ -127,7 +117,7 @@ jobs:
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       with:
-        projectPath: rust-scanner-workspace/scanner-desktop
+        projectPath: neo-fd-desktop
         tagName: ${{ needs.prepare.outputs.tag }}
         releaseName: "Neo FD ${{ needs.prepare.outputs.tag }}"
         releaseBody: "自動發布版本 ${{ needs.prepare.outputs.tag }}。請從下方下載對應系統的安裝檔。"

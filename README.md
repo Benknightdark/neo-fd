@@ -4,100 +4,61 @@
 
 ## 專案特色
 
-*   **雙介面支援**：提供終端機介面 (TUI) 與桌面介面 (GUI/Tauri)。
+*   **桌面應用支援**：提供基於 Vue 3 與 Tauri 2 的桌面圖形介面 (GUI)。
 *   **極速平行掃描**：底層採用與 `ripgrep` 相同的 `ignore` crate，支援高效平行目錄走訪。
 *   **零記憶體浪費**：引擎採用單一 Buffer 重複讀取，避免在大檔案掃描時頻繁分配記憶體。
 *   **智慧過濾**：自動套用 `.gitignore` 排除規則，並跳過二進位與非 UTF-8 檔案，確保穩定執行。
-*   **即時錯誤檢查**：互動式介面提供即時的正規表達式語法驗證。
-*   **模組化設計**：核心引擎為獨立的 `scanner-core` Library，便於整合至其他 Rust 應用（如 Web 伺服器、CLI 或 GUI）。
+*   **即時錯誤檢查**：桌面介面提供即時的正規表達式語法驗證。
+*   **模組化設計**：核心引擎設計為 `neo-fd-desktop/src-tauri` 中的獨立 `scanner` 模組，專注於平行目錄遍歷與個資掃描，便於內部維護與 Tauri 指令綁定。
 
 ## 目錄結構
 
-採用 Cargo Workspace 架構，核心邏輯與介面層徹底解耦：
+合流重構與架構精簡後，後端完全收攏為獨立 Crate，專案結構如下：
 
 ```text
-rust-scanner-workspace/
-├── Cargo.toml               # Workspace 定義檔
-├── Cargo.lock
-├── scanner-core/            # [Library] 核心掃描引擎，處理多執行緒走訪與正則比對
-├── rust-scanner-cli/        # [Binary]  終端機互動介面 (TUI) 實作
-└── scanner-desktop/         # [Tauri]   桌面圖形介面 (GUI) 實作，基於 Vue 3
+neo-fd/
+├── package.json             # 根 npm 腳本定義
+└── neo-fd-desktop/          # 前端與 Tauri 桌面端專案
+    ├── src/                 # Vue 3 前端單頁應用 (GUI)
+    └── src-tauri/           # Tauri 2 / Rust 後端核心
+        ├── Cargo.toml       # 整合 anyhow / ignore 依賴之核心配置
+        └── src/
+            ├── lib.rs       # Tauri 指令及事件生命週期管理
+            ├── main.rs      # 二進位進入點
+            └── scanner.rs   # 核心掃描模組，處理多執行緒走訪與正則匹配
 ```
 
 ## 安裝與執行
 
-請確保系統已安裝 Rust、Cargo (Edition 2024) 與 Node.js。
+本專案已將所有前端、Tauri 後端與相關相依工具鏈（Husky、Commitlint、Linter）全數收攏至 `neo-fd-desktop/` 目錄中，根目錄保持 100% 純淨。**請確保所有的 npm 相依安裝、開發生產指令，均於 `neo-fd-desktop/` 目錄內執行。**
 
-### 1. 啟動互動式 CLI (TUI)
+請確保系統已安裝 Rust、Cargo 與 Node.js。
 
-```bash
-cd rust-scanner-workspace
-cargo run --bin rust-scanner-cli
-```
-
-### 2. 啟動桌面應用程式 (GUI)
+### 1. 啟動桌面應用程式 (GUI)
 
 ```bash
-cd rust-scanner-workspace/scanner-desktop
+cd neo-fd-desktop
 npm install
 npm run tauri dev
 ```
 
-### 3. 編譯 Release 執行檔 (CLI)
-
-若要獲得最佳的掃描效能並產生獨立執行檔：
-
-```bash
-cd rust-scanner-workspace
-cargo build --release --bin rust-scanner-cli
-```
-
-編譯後執行檔位於：
-`rust-scanner-workspace/target/release/rust-scanner-cli`
-
-### 4. 編譯 Release 執行檔 (Desktop)
+### 2. 編譯 Release 執行檔 (Desktop)
 
 若要編譯桌面應用程式安裝檔：
 
 ```bash
-cd rust-scanner-workspace/scanner-desktop
+cd neo-fd-desktop
 npm run tauri build
 ```
 
 安裝檔（.msi, .exe 等）將位於：
-`rust-scanner-workspace/scanner-desktop/src-tauri/target/release/bundle/`
+`target/release/bundle/`
 
 
-## 整合核心引擎
+## 開發與品質規範
 
-在其他 Rust 專案的 `Cargo.toml` 中加入相依路徑：
+本專案所有的品質管控指令皆已整合並收攏至 `neo-fd-desktop` 中：
+*   **全域靜態檢查**：提交前請在 `neo-fd-desktop` 目錄下執行 `npm run lint:all`（進行前端 Biome 與後端 Rust fmt/clippy 檢查）。
+*   **單元測試驗證**：請在 `neo-fd-desktop` 目錄下執行 `npm run test:all` 執行所有前端 Vitest 與後端 Cargo 測試。
+*   **核心原則**：桌面介面與 IPC 層須妥善處理錯誤輸入，絕不 Panic；後端引擎保持零記憶體分配。
 
-```toml
-[dependencies]
-scanner-core = { path = "../rust-scanner-workspace/scanner-core" }
-```
-
-接著在程式碼中呼叫：
-
-```rust
-use scanner_core::Scanner;
-use regex::Regex;
-use std::path::PathBuf;
-
-fn main() {
-    let patterns = vec![
-        ("自定義配對".to_string(), Regex::new(r"YOUR_REGEX_HERE").unwrap())
-    ];
-    // 傳入回呼函數來處理掃描結果
-    let scanner = Scanner::new(patterns, |res| {
-        println!("[{}:{}] {}: {}", res.path, res.line_num, res.pattern_name, res.matched_text);
-    });
-    scanner.scan_dir(&PathBuf::from("/path/to/scan"));
-}
-```
-
-## 開發規範
-
-*   **格式化**：提交前請執行 `cargo fmt`。
-*   **靜態檢查**：確保 `cargo clippy` 無警告。
-*   **核心原則**：TUI 介面禁止 Panic，須妥善處理錯誤輸入；核心引擎保持零記憶體分配。

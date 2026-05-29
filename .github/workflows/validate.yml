@@ -40,21 +40,21 @@ jobs:
     - name: Rust Cache
       uses: Swatinem/rust-cache@v2
       with:
-        workspaces: "rust-scanner-workspace"
+        workspaces: "neo-fd-desktop/src-tauri"
         
     # 步驟 5：檢查程式碼格式是否符合規範（cargo fmt）
     - name: Check Formatting
-      working-directory: rust-scanner-workspace
+      working-directory: neo-fd-desktop/src-tauri
       run: cargo fmt --check
       
     # 步驟 6：使用 Clippy 進行程式碼靜態分析（若有警告則報錯失敗）
     - name: Clippy Lints
-      working-directory: rust-scanner-workspace
+      working-directory: neo-fd-desktop/src-tauri
       run: cargo clippy -- -D warnings
       
-    # 步驟 7：運行 Rust 核心庫與 CLI 的單元與整合測試
+    # 步驟 7：運行整合了核心掃描模組的 Tauri 後端單元與整合測試
     - name: Run Tests
-      working-directory: rust-scanner-workspace
+      working-directory: neo-fd-desktop/src-tauri
       run: cargo test
 
   # Job 2：執行前端（Tauri Desktop Vue 3）程式碼檢查與測試
@@ -76,26 +76,26 @@ jobs:
       with:
         node-version: '20'
         cache: 'npm'
-        cache-dependency-path: rust-scanner-workspace/scanner-desktop/package-lock.json
+        cache-dependency-path: neo-fd-desktop/package-lock.json
         
     # 步驟 3：乾淨安裝前端相依套件
     - name: Install Dependencies
-      working-directory: rust-scanner-workspace/scanner-desktop
+      working-directory: neo-fd-desktop
       run: npm ci
       
     # 步驟 4：執行 Biome 進行前端語法靜態檢查與格式化驗證
     - name: Lint (Biome)
-      working-directory: rust-scanner-workspace/scanner-desktop
+      working-directory: neo-fd-desktop
       run: npm run lint
       
     # 步驟 5：進行打包編譯與 TypeScript 型別安全檢查
     - name: Build & Typecheck
-      working-directory: rust-scanner-workspace/scanner-desktop
+      working-directory: neo-fd-desktop
       run: npm run build
       
     # 步驟 6：執行 Vitest 前端單元測試
     - name: Run Unit Tests
-      working-directory: rust-scanner-workspace/scanner-desktop
+      working-directory: neo-fd-desktop
       run: npm run test
 
   # Job 3：自動建立 Pull Request (僅在 develop 分支有成功 push 時運行)

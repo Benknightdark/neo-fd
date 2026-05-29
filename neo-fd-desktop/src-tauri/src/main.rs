@@ -2,5 +2,5 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 fn main() {
-    scanner_desktop_lib::run()
+    neo_fd_desktop_lib::run()
 }

@@ -1,5 +1,0 @@
-cd rust-scanner-workspace || exit 0
-cargo fmt --check
-cargo check
-cd scanner-desktop || exit 0
-npm run lint

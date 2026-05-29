@@ -1,0 +1,1 @@
+npm run --prefix neo-fd-desktop lint:all
