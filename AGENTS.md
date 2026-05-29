@@ -81,25 +81,20 @@ graph TD
 
 ```mermaid
 graph TD
-    subgraph clients ["介面層 Clients (Consumers)"]
-        cli["rust-scanner-cli (Ratatui TUI)"]
-        desktop["scanner-desktop (Vue 3 + Tauri 2 App)"]
-    end
+    desktop["scanner-desktop (Vue 3 + Tauri 2 App)"]
     
     subgraph engine ["核心引擎 Engine (Library)"]
         core["scanner-core (Fast Engine)"]
     end
     
-    cli --> core
     desktop --> core
     
     style core fill:#3b82f6,stroke:#1d4ed8,stroke-width:2px,color:#fff
-    style cli fill:#10b981,stroke:#047857,stroke-width:2px,color:#fff
     style desktop fill:#8b5cf6,stroke:#6d28d9,stroke-width:2px,color:#fff
 ```
 
 ### 1. 核心邊界原則 (Boundary Principles)
-*   **純淨核心**：`scanner-core` 是純粹的 Library，不可引入與 UI、Tauri、TUI 或 CLI 相關的第三方 Crate。
+*   **純淨核心**：`scanner-core` 是純粹的 Library，不可引入與 UI、Tauri 或桌面端相關的第三方 Crate。
 *   **Callback 驅動**：核心引擎對外提供基於 Callback 的非同步/同步通知 API `Fn(ScanResult)`，由介面層自主決定如何渲染或儲存掃描結果。
 *   **零記憶體浪費 (Zero-GC Optimization)**：
     *   核心引擎逐行讀取檔案時，**禁止**在迴圈內宣告或分配新的 `String`。
@@ -128,15 +123,14 @@ graph TD
 ### Recipe A: 新增敏感資料掃描規則與驗證
 
 1.  **配置測試資料 (Fixtures)**：
-    *   在 [rust-scanner-workspace/rust-scanner-cli/tests/data/](file:///Users/ben/Projects/neo-fd/rust-scanner-workspace/rust-scanner-cli/tests/data/) 中建立測試檔案。
+    *   若需要核心整合測試資料，請在 `scanner-core/tests/data/` 中建立測試檔案。
     *   `test_sensitive.txt`：填入「虛擬正向條件」（如 `A123456789`）與「負向條件」（如 `A1234`）。
     *   **⚠️ 嚴禁使用真實的台灣身分證、信用卡號、姓名等個資！**
 2.  **註冊規則**：
-    *   在 TUI 介面層 `rust-scanner-cli/src/main.rs` 的 `App::new()` 中的 `regex_items` 陣列新增正則表達式：
-        ```rust
-        ("信用卡號", r"\b\d{4}-\d{4}-\d{4}-\d{4}\b")
+    *   在桌面端 `scanner-desktop/src/stores/scan.ts` 的預設規則清單新增正則表達式：
+        ```typescript
+        { name: '信用卡號', pattern: '\\b\\d{4}-\\d{4}-\\d{4}-\\d{4}\\b', enabled: true }
         ```
-    *   在桌面端 `scanner-desktop` 的規則配置檔或前端調用處，同步配置對應的 Regex 比對規則。
 3.  **撰寫並運行測試**：
     *   在核心引擎或整合測試中加入斷言。
     *   執行本地驗證：`cargo test`

@@ -1,6 +1,5 @@
 [workspace]
 members = [
-    "rust-scanner-cli",
     "scanner-core",
     "scanner-desktop/src-tauri"
 ]
