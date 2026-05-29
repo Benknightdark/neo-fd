@@ -2,6 +2,7 @@
 import { storeToRefs } from 'pinia';
 import { computed, nextTick, ref, watch } from 'vue';
 import { type ScanResult, scannerApi, systemApi } from '../api/ipc';
+import { useNotificationStore } from '../stores/notification';
 import { useScanStore } from '../stores/scan';
 
 // 定義傳入屬性：控制抽屜開啟/關閉，以及目前選中的洩漏點資料
@@ -15,6 +16,7 @@ const emit = defineEmits<(e: 'close') => void>();
 
 const store = useScanStore();
 const { results } = storeToRefs(store);
+const notificationStore = useNotificationStore();
 
 // 本地元件渲染狀態
 const isLoadingFile = ref(false);
@@ -25,6 +27,11 @@ const drawerActiveMatchIndex = ref(0);
 const drawerLines = ref<string[]>([]);
 const drawerError = ref('');
 const codeViewerRef = ref<HTMLElement | null>(null);
+
+// 新增：編輯模式狀態與內容緩衝
+const isEditing = ref(false);
+const editedContent = ref('');
+const isSaving = ref(false);
 
 // 計算屬性：篩選出當前開啟檔案的所有個資洩漏點，並依據行號遞增排序
 const activeFileMatches = computed(() => {
@@ -42,6 +49,7 @@ async function loadFileContent(result: ScanResult) {
   drawerMatchedText.value = result.matched_text;
   drawerLines.value = [];
   drawerError.value = '';
+  isEditing.value = false; // 切換檔案時自動離開編輯模式
 
   // 尋找目前選取點在該檔案所有洩漏點中的索引序號
   const clickedIndex = activeFileMatches.value.findIndex(
@@ -67,6 +75,7 @@ async function loadFileContent(result: ScanResult) {
 
 // 平滑滾動視窗定位，將金色高亮行置於容器正中央
 function scrollToActiveLine() {
+  if (isEditing.value) return; // 編輯中無須捲動
   const targetElement = codeViewerRef.value?.querySelector('.highlight-line');
   if (targetElement) {
     targetElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -91,6 +100,8 @@ watch(
           drawerMatchedText.value = '';
           drawerActiveMatchIndex.value = 0;
           drawerError.value = '';
+          isEditing.value = false;
+          editedContent.value = '';
         }
       }, 400);
     }
@@ -134,6 +145,8 @@ function splitMatchedLine(lineText: string, matchedText: string): TextPart[] {
 
 // HUD 指標導航跳轉（前一個 / 後一個洩漏點）
 async function jumpToMatch(index: number) {
+  if (isEditing.value) return; // 編輯中禁用跳轉
+
   const targetResult = activeFileMatches.value[index];
   if (!targetResult) return;
 
@@ -187,11 +200,131 @@ function startResize(e: MouseEvent) {
   window.addEventListener('mousemove', doResize);
   window.addEventListener('mouseup', stopResize);
 }
+
+// 新增：綁定編輯器 DOM 控制
+const lineNumbersRef = ref<HTMLElement | null>(null);
+const textareaRef = ref<HTMLElement | null>(null);
+
+// 新增：即時計算編輯狀態下的總行數
+const editedLinesCount = computed(() => {
+  return editedContent.value.split(/\r?\n/).length || 1;
+});
+
+// 新增：同步滾動編輯器行號與輸入區
+function syncScroll() {
+  if (textareaRef.value && lineNumbersRef.value) {
+    lineNumbersRef.value.scrollTop = textareaRef.value.scrollTop;
+  }
+}
+
+// 新增：精準定位並反白選取編輯器中的個資敏感文字
+function focusAndSelectLeak() {
+  if (!textareaRef.value || !props.activeResult) return;
+
+  const lines = drawerLines.value;
+  const targetLineIdx = props.activeResult.line_num - 1;
+  const matchedText = props.activeResult.matched_text;
+
+  if (targetLineIdx < 0 || targetLineIdx >= lines.length) return;
+
+  // 計算目標行之前的字元偏偏移長度
+  let charOffset = 0;
+  for (let i = 0; i < targetLineIdx; i++) {
+    charOffset += lines[i].length + 1; // +1 代表換行符
+  }
+
+  const targetLineText = lines[targetLineIdx];
+  const matchInLineIdx = targetLineText.indexOf(matchedText);
+
+  if (matchInLineIdx !== -1) {
+    const selectionStart = charOffset + matchInLineIdx;
+    const selectionEnd = selectionStart + matchedText.length;
+
+    nextTick(() => {
+      if (textareaRef.value) {
+        textareaRef.value.focus();
+        textareaRef.value.setSelectionRange(selectionStart, selectionEnd);
+
+        // 滾動到目標行並置中
+        const lineHeight = 22; // 行高 22px
+        const scrollOffset = Math.max(0, targetLineIdx * lineHeight - 150);
+        textareaRef.value.scrollTop = scrollOffset;
+        if (lineNumbersRef.value) {
+          lineNumbersRef.value.scrollTop = scrollOffset;
+        }
+      }
+    });
+  }
+}
+
+// 新增：切換至編輯模式
+function startEdit() {
+  editedContent.value = drawerLines.value.join('\n');
+  isEditing.value = true;
+
+  // 100ms 延遲以確保 DOM 已經妥善渲染，隨後自動定位反白
+  setTimeout(() => {
+    focusAndSelectLeak();
+  }, 100);
+}
+
+// 新增：取消編輯並回復
+function cancelEdit() {
+  isEditing.value = false;
+  editedContent.value = '';
+}
+
+// 新增：儲存編輯內容
+async function saveEdit() {
+  if (isSaving.value) return;
+  isSaving.value = true;
+
+  try {
+    await scannerApi.writeFileContent(drawerPath.value, editedContent.value);
+    notificationStore.add(
+      '檔案修改已儲存。建議您重新掃描以驗證敏感個資是否已成功遮蔽！',
+      'success',
+    );
+    isEditing.value = false;
+
+    // 重新載入修改後的內容
+    if (props.activeResult) {
+      await loadFileContent(props.activeResult);
+    }
+  } catch (err) {
+    notificationStore.add(`儲存修改失敗: ${(err as Error).message}`, 'error');
+  } finally {
+    isSaving.value = false;
+  }
+}
+
+// 新增：二次確認並永久刪除檔案
+async function confirmDelete() {
+  const file = getFileName(drawerPath.value);
+  const isConfirmed = confirm(
+    `⚠️ 警告：您確定要永久刪除此檔案嗎？\n\n檔案名稱: ${file}\n完整路徑: ${drawerPath.value}\n\n此操作會將該檔案自硬碟中徹底移除且「無法復原」！請確認這不是系統關鍵檔案。`,
+  );
+
+  if (!isConfirmed) return;
+
+  try {
+    await scannerApi.deleteFile(drawerPath.value);
+    notificationStore.add('檔案已成功永久刪除。', 'success');
+
+    // 即時將其從前端 Scan results store 中濾除，UI 目錄樹即時反應消失
+    store.removeResultsByPath(drawerPath.value);
+
+    // 關閉抽屜
+    emit('close');
+  } catch (err) {
+    notificationStore.add(`刪除檔案失敗: ${(err as Error).message}`, 'error');
+  }
+}
 </script>
 
 <template>
   <div class="drawer-container" :class="{ active: isOpen }">
-    <div class="drawer-backdrop" @click="emit('close')"></div>
+    <div class="drawer-backdrop" @click="isSaving ? null : emit('close')"></div>
     <aside class="drawer-panel" :style="{ width: drawerWidth + 'px' }" :class="{ resizing: isResizing }">
       <div class="drawer-resizer" @mousedown="startResize"></div>
       <header class="drawer-header">
@@ -200,14 +333,53 @@ function startResize(e: MouseEvent) {
           <span class="drawer-path" :title="drawerPath">{{ drawerPath }}</span>
         </div>
         <div class="drawer-actions">
-          <button
-            class="open-system-btn"
-            title="使用系統預設應用程式開啟"
-            @click="systemApi.openFile(drawerPath)"
-          >
-            🗁 外部開啟
-          </button>
-          <button class="close-btn" @click="emit('close')" aria-label="關閉面板">
+          <!-- 唯讀模式下的功能按鈕 -->
+          <template v-if="!isEditing && !drawerError && !isLoadingFile">
+            <button
+              class="edit-btn"
+              title="修改檔案敏感內容"
+              @click="startEdit"
+            >
+              ✏️ 編輯內容
+            </button>
+            <button
+              v-if="drawerPath"
+              class="delete-btn"
+              title="自硬碟永久刪除此檔案"
+              @click="confirmDelete"
+            >
+              🗑️ 刪除檔案
+            </button>
+            <button
+              class="open-system-btn"
+              title="使用系統預設應用程式開啟"
+              @click="systemApi.openFile(drawerPath)"
+            >
+              🗁 外部開啟
+            </button>
+          </template>
+
+          <!-- 編輯模式下的操作按鈕 -->
+          <template v-else-if="isEditing">
+            <button
+              class="save-btn"
+              :disabled="isSaving"
+              @click="saveEdit"
+              title="儲存檔案修改"
+            >
+              {{ isSaving ? '💾 儲存中...' : '💾 儲存修改' }}
+            </button>
+            <button
+              class="cancel-btn"
+              :disabled="isSaving"
+              @click="cancelEdit"
+              title="放棄修改並取消"
+            >
+              ❌ 取消
+            </button>
+          </template>
+
+          <button class="close-btn" :disabled="isSaving" @click="emit('close')" aria-label="關閉面板">
             &times;
           </button>
         </div>
@@ -226,15 +398,29 @@ function startResize(e: MouseEvent) {
           <p>{{ drawerError }}</p>
         </div>
 
-        <!-- Code Viewer Content -->
+        <!-- Code Viewer & Editor Content -->
         <div v-else class="code-viewer-container">
+          <!-- 敏感字元高亮對照 HUD (僅在編輯模式下且有 activeResult 時呈現) -->
+          <div v-if="isEditing && activeResult" class="editor-leak-hud">
+            <span class="warning-flashing-icon">💡</span>
+            <span class="hud-text">
+              請在下方修正第 <strong>{{ activeResult.line_num }}</strong> 行的個資洩漏文字：
+              <code class="leak-highlight-token" :title="activeResult.matched_text">
+                {{ activeResult.matched_text }}
+              </code>
+            </span>
+            <button class="locate-btn" @click="focusAndSelectLeak" title="一鍵聚焦並反白個資文字">
+              🎯 重新定位選取
+            </button>
+          </div>
+
           <div class="code-header-info">
             <div class="code-stats">
-              <span>高亮行號: <strong>{{ drawerTargetLine }}</strong></span>
+              <span>高亮行號: <strong>{{ isEditing ? '編輯中' : drawerTargetLine }}</strong></span>
               <span class="divider">|</span>
               <span>共 <strong>{{ drawerLines.length }}</strong> 行</span>
             </div>
-            <div v-if="activeFileMatches.length > 1" class="navigator-group">
+            <div v-if="!isEditing && activeFileMatches.length > 1" class="navigator-group">
               <button
                 class="nav-btn"
                 :disabled="drawerActiveMatchIndex <= 0"
@@ -257,7 +443,8 @@ function startResize(e: MouseEvent) {
             </div>
           </div>
 
-          <div ref="codeViewerRef" class="code-viewer">
+          <!-- A. 唯讀狀態之語法高亮 Code Viewer -->
+          <div v-if="!isEditing" ref="codeViewerRef" class="code-viewer">
             <div
               v-for="(line, index) in drawerLines"
               :key="index"
@@ -267,6 +454,31 @@ function startResize(e: MouseEvent) {
               <span class="line-number">{{ index + 1 }}</span>
               <pre class="line-content"><template v-if="index + 1 === drawerTargetLine && drawerMatchedText"><span v-for="(part, pIdx) in splitMatchedLine(line, drawerMatchedText)" :key="pIdx" :class="{ 'match-segment': part.isMatch }">{{ part.text }}</span></template><template v-else>{{ line || ' ' }}</template></pre>
             </div>
+          </div>
+
+          <!-- B. 編輯狀態之自定義極簡 TextArea 編輯器 (帶有同步滾動行號列) -->
+          <div v-else class="code-editor-wrapper">
+            <!-- 編輯器左側行號列 -->
+            <div ref="lineNumbersRef" class="editor-line-numbers">
+              <div
+                v-for="n in editedLinesCount"
+                :key="n"
+                class="editor-line-number"
+                :class="{ 'highlight-editor-line': n === drawerTargetLine }"
+              >
+                {{ n }}
+              </div>
+            </div>
+            <!-- 編輯器右側文字輸入區 -->
+            <textarea
+              ref="textareaRef"
+              class="code-editor-textarea"
+              v-model="editedContent"
+              :disabled="isSaving"
+              @scroll="syncScroll"
+              placeholder="請在此處編輯或遮蔽敏感內容，點擊右上角「儲存修改」寫入磁碟..."
+              spellcheck="false"
+            ></textarea>
           </div>
         </div>
       </div>
@@ -625,5 +837,231 @@ function startResize(e: MouseEvent) {
   padding: 1px 4px;
   font-weight: 700;
   box-shadow: 0 0 6px rgba(220, 53, 69, 0.2);
+}
+
+/* 編輯修改按鈕 */
+.edit-btn {
+  padding: 8px 14px;
+  background: #f1f3f5;
+  color: #495057;
+  border: 1px solid #dee2e6;
+  border-radius: 6px;
+  font-size: 0.82rem;
+  cursor: pointer;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.2s;
+}
+
+.edit-btn:hover {
+  background: #e9ecef;
+  border-color: #ced4da;
+  color: #007bff;
+}
+
+/* 刪除按鈕 (紅色 glassmorphic) */
+.delete-btn {
+  padding: 8px 14px;
+  background: rgba(220, 53, 69, 0.08);
+  color: #dc3545;
+  border: 1px solid rgba(220, 53, 69, 0.25);
+  border-radius: 6px;
+  font-size: 0.82rem;
+  cursor: pointer;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.2s;
+}
+
+.delete-btn:hover {
+  background: #dc3545;
+  border-color: #dc3545;
+  color: #fff;
+  box-shadow: 0 2px 6px rgba(220, 53, 69, 0.2);
+}
+
+/* 儲存按鈕 (實心藍) */
+.save-btn {
+  padding: 8px 14px;
+  background: #007bff;
+  color: #fff;
+  border: 1px solid #007bff;
+  border-radius: 6px;
+  font-size: 0.82rem;
+  cursor: pointer;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.2s;
+}
+
+.save-btn:hover:not(:disabled) {
+  background: #0056b3;
+  border-color: #0056b3;
+}
+
+.save-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* 取消按鈕 (灰) */
+.cancel-btn {
+  padding: 8px 14px;
+  background: #e9ecef;
+  color: #495057;
+  border: 1px solid #ced4da;
+  border-radius: 6px;
+  font-size: 0.82rem;
+  cursor: pointer;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.2s;
+}
+
+.cancel-btn:hover:not(:disabled) {
+  background: #dee2e6;
+  color: #212529;
+}
+
+.cancel-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* 編輯器佈局與極簡文字框 */
+.code-editor-wrapper {
+  flex: 1;
+  display: flex;
+  background: #23241f;
+  overflow: hidden;
+  position: relative;
+}
+
+.code-editor-textarea {
+  width: 100%;
+  height: 100%;
+  background: #23241f;
+  color: #f8f8f2;
+  border: none;
+  outline: none;
+  font-family: 'Fira Code', Consolas, Monaco, monospace;
+  font-size: 0.82rem;
+  line-height: 22px;
+  padding: 20px 18px; /* 調整左側 padding 讓文字與行號完美靠攏對齊 */
+  resize: none;
+  box-sizing: border-box;
+  tab-size: 4;
+}
+
+.code-editor-textarea:focus {
+  background: #1e1f1c; /* 聚焦時稍微更暗，聚焦專注 */
+}
+
+/* 編輯器左側行號列 */
+.editor-line-numbers {
+  width: 55px;
+  min-width: 55px;
+  text-align: right;
+  padding-right: 18px;
+  color: #75715e;
+  user-select: none;
+  background: rgba(0, 0, 0, 0.15);
+  border-right: 1px solid rgba(255, 255, 255, 0.05);
+  overflow: hidden; /* 由 JS 同步滾動，隱藏滾動條 */
+  padding-top: 20px;
+  box-sizing: border-box;
+}
+
+.editor-line-number {
+  height: 22px;
+  line-height: 22px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+/* 編輯器高亮行號列標記 */
+.highlight-editor-line {
+  color: #f1c40f;
+  background: rgba(255, 193, 7, 0.08);
+  font-weight: 700;
+}
+
+/* 個資敏感資料高亮對照 HUD */
+.editor-leak-hud {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: rgba(220, 53, 69, 0.04);
+  border-bottom: 1px solid rgba(220, 53, 69, 0.15);
+  padding: 10px 24px;
+  font-size: 0.82rem;
+  color: #f8f9fa;
+  box-shadow: inset 0 -4px 10px rgba(0, 0, 0, 0.05);
+}
+
+.hud-text {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #adb5bd;
+}
+
+.hud-text strong {
+  color: #ff4757;
+}
+
+/* 警示微動畫 */
+.warning-flashing-icon {
+  font-size: 1rem;
+  animation: flash 1.5s ease-in-out infinite;
+}
+
+@keyframes flash {
+  0%, 100% { opacity: 0.4; }
+  50% { opacity: 1; }
+}
+
+/* 敏感資料 Code Token */
+.leak-highlight-token {
+  font-family: 'Fira Code', Consolas, Monaco, monospace;
+  background: rgba(220, 53, 69, 0.25);
+  color: #ff4757;
+  border: 1px solid rgba(220, 53, 69, 0.4);
+  border-radius: 4px;
+  padding: 2px 8px;
+  font-weight: 700;
+  margin-left: 6px;
+  box-shadow: 0 0 6px rgba(220, 53, 69, 0.15);
+}
+
+/* 一鍵定位選取按鈕 */
+.locate-btn {
+  background: #dc3545;
+  color: #fff;
+  border: 1px solid #dc3545;
+  padding: 4px 12px;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.locate-btn:hover {
+  background: #bd2130;
+  border-color: #b21f2d;
+  box-shadow: 0 2px 5px rgba(220, 53, 69, 0.3);
 }
 </style>

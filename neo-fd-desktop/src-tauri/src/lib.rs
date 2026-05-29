@@ -1,5 +1,6 @@
 use regex::Regex;
-use scanner_core::Scanner;
+mod scanner;
+use scanner::Scanner;
 use tauri::Emitter;
 
 #[tauri::command]
@@ -48,11 +49,46 @@ async fn read_file_content(path: String) -> Result<String, String> {
     Ok(content)
 }
 
+#[tauri::command]
+async fn write_file_content(path: String, content: String) -> Result<(), String> {
+    let file_path = std::path::Path::new(&path);
+    if !file_path.exists() {
+        return Err("所選路徑的檔案不存在。".to_string());
+    }
+    if !file_path.is_file() {
+        return Err("所選路徑不是有效的檔案。".to_string());
+    }
+
+    std::fs::write(file_path, content).map_err(|e| format!("無法寫入檔案內容: {}", e))?;
+
+    Ok(())
+}
+
+#[tauri::command]
+async fn delete_file(path: String) -> Result<(), String> {
+    let file_path = std::path::Path::new(&path);
+    if !file_path.exists() {
+        return Err("檔案不存在或已被刪除。".to_string());
+    }
+    if !file_path.is_file() {
+        return Err("所選路徑不是有效的檔案。".to_string());
+    }
+
+    std::fs::remove_file(file_path).map_err(|e| format!("無法刪除檔案: {}", e))?;
+
+    Ok(())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
-        .invoke_handler(tauri::generate_handler![scan_directory, read_file_content])
+        .invoke_handler(tauri::generate_handler![
+            scan_directory,
+            read_file_content,
+            write_file_content,
+            delete_file
+        ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

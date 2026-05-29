@@ -1,6 +1,0 @@
-[workspace]
-members = [
-    "scanner-core",
-    "scanner-desktop/src-tauri"
-]
-resolver = "2"

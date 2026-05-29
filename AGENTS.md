@@ -57,7 +57,7 @@ graph TD
 1.  **環境感知 (Perceive & Discover)**：
     *   檢查當前分支狀態：`git status`
     *   閱讀核心文件：[README.md](file:///Users/ben/Projects/neo-fd/README.md)、[AGENTS.md](file:///Users/ben/Projects/neo-fd/AGENTS.md) 以及根目錄 [package.json](file:///Users/ben/Projects/neo-fd/package.json)。
-    *   分析 Crate 工作區結構與 `Cargo.toml` 定義。
+    *   分析 Crate 工作區結構與後端 `Cargo.toml` 定義。
 2.  **健康度偵測 (Sensor Health Check)**：
     *   修改前，須先在根目錄執行靜態檢查，確認環境為綠燈：
         ```bash
@@ -75,27 +75,25 @@ graph TD
 
 ---
 
-## 三、 Workspace 架構與依賴規範 (Strict Boundaries)
+## 三、 專案架構與內聚模組規範 (Strict Boundaries)
 
-本專案將核心引擎與使用者介面完全解耦，以保持引擎純淨：
+本專案將核心引擎以高內聚模組的形式整合於桌面端 Tauri 後端中，維持邏輯與 UI 渲染的解耦：
 
 ```mermaid
 graph TD
-    desktop["scanner-desktop (Vue 3 + Tauri 2 App)"]
-    
-    subgraph engine ["核心引擎 Engine (Library)"]
-        core["scanner-core (Fast Engine)"]
+    subgraph desktop ["neo-fd-desktop (Tauri App)"]
+        ui["前端 UI (Vue 3)"]
+        core["核心掃描模組 (scanner.rs)"]
     end
-    
-    desktop --> core
+    ui -->|Tauri IPC 指令| core
     
     style core fill:#3b82f6,stroke:#1d4ed8,stroke-width:2px,color:#fff
-    style desktop fill:#8b5cf6,stroke:#6d28d9,stroke-width:2px,color:#fff
+    style ui fill:#8b5cf6,stroke:#6d28d9,stroke-width:2px,color:#fff
 ```
 
 ### 1. 核心邊界原則 (Boundary Principles)
-*   **純淨核心**：`scanner-core` 是純粹的 Library，不可引入與 UI、Tauri 或桌面端相關的第三方 Crate。
-*   **Callback 驅動**：核心引擎對外提供基於 Callback 的非同步/同步通知 API `Fn(ScanResult)`，由介面層自主決定如何渲染或儲存掃描結果。
+*   **純淨核心**：`scanner.rs` 是純粹的獨立邏輯模組，不可引入與 UI、Tauri API 或桌面端窗口相關的任何第三方 Crate。
+*   **Callback 驅動**：核心引擎對外提供基於 Callback 的非同步/同步通知 API `Fn(ScanResult)`，由 Tauri IPC 層（`lib.rs`）自主決定如何向前端發送事件或進行狀態儲存。
 *   **零記憶體浪費 (Zero-GC Optimization)**：
     *   核心引擎逐行讀取檔案時，**禁止**在迴圈內宣告或分配新的 `String`。
     *   使用定義在迴圈外的單一 `line_buf` 緩衝區，並在每次走訪前調用 `line_buf.clear()` 重置。
@@ -123,22 +121,22 @@ graph TD
 ### Recipe A: 新增敏感資料掃描規則與驗證
 
 1.  **配置測試資料 (Fixtures)**：
-    *   若需要核心整合測試資料，請在 `scanner-core/tests/data/` 中建立測試檔案。
+    *   若需要核心整合測試資料，請在 `neo-fd-desktop/src-tauri/` 中建立或配置測試檔案。
     *   `test_sensitive.txt`：填入「虛擬正向條件」（如 `A123456789`）與「負向條件」（如 `A1234`）。
     *   **⚠️ 嚴禁使用真實的台灣身分證、信用卡號、姓名等個資！**
 2.  **註冊規則**：
-    *   在桌面端 `scanner-desktop/src/stores/scan.ts` 的預設規則清單新增正則表達式：
+    *   在桌面端 `neo-fd-desktop/src/stores/scan.ts` 的預設規則清單新增正則表達式：
         ```typescript
         { name: '信用卡號', pattern: '\\b\\d{4}-\\d{4}-\\d{4}-\\d{4}\\b', enabled: true }
         ```
 3.  **撰寫並運行測試**：
-    *   在核心引擎或整合測試中加入斷言。
+    *   在後端 `src-tauri/src/scanner.rs` 的測試模組或整合測試中加入斷言。
     *   執行本地驗證：`cargo test`
 
 ### Recipe B: 偵錯 Vue 3 與 Rust 核心之間的 Tauri IPC 通訊
 
 1.  **後端 Tauri Command 宣告**：
-    *   在 `scanner-desktop/src-tauri/src/lib.rs` 中使用 `#[tauri::command]` 宣告 IPC 介面，並將 Regex 編譯結果傳給 `scanner-core`。
+    *   在 `neo-fd-desktop/src-tauri/src/lib.rs` 中使用 `#[tauri::command]` 宣告 IPC 介面，並將 Regex 編譯結果傳給本地的 `scanner` 模組。
     *   若 Regex 語法錯誤，以 `map_err(|e| e.to_string())?` 返回前端，禁止 unwrap。
 2.  **前端調用**：
     *   在前端 Vue 中透過 `@tauri-apps/api/core` 調用 `invoke`：

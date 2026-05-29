@@ -9,18 +9,23 @@
 *   **零記憶體浪費**：引擎採用單一 Buffer 重複讀取，避免在大檔案掃描時頻繁分配記憶體。
 *   **智慧過濾**：自動套用 `.gitignore` 排除規則，並跳過二進位與非 UTF-8 檔案，確保穩定執行。
 *   **即時錯誤檢查**：桌面介面提供即時的正規表達式語法驗證。
-*   **模組化設計**：核心引擎為獨立的 `scanner-core` Library，便於整合至其他 Rust 應用（如 Web 伺服器或桌面應用）。
+*   **模組化設計**：核心引擎設計為 `neo-fd-desktop/src-tauri` 中的獨立 `scanner` 模組，專注於平行目錄遍歷與個資掃描，便於內部維護與 Tauri 指令綁定。
 
 ## 目錄結構
 
-採用 Cargo Workspace 架構，核心邏輯與介面層徹底解耦：
+合流重構與架構精簡後，後端完全收攏為獨立 Crate，專案結構如下：
 
 ```text
 neo-fd/
-├── Cargo.toml               # Workspace 定義檔
-├── Cargo.lock
-├── scanner-core/            # [Library] 核心掃描引擎，處理多執行緒走訪與正則比對
-└── scanner-desktop/         # [Tauri]   桌面圖形介面 (GUI) 實作，基於 Vue 3
+├── package.json             # 根 npm 腳本定義
+└── neo-fd-desktop/          # 前端與 Tauri 桌面端專案
+    ├── src/                 # Vue 3 前端單頁應用 (GUI)
+    └── src-tauri/           # Tauri 2 / Rust 後端核心
+        ├── Cargo.toml       # 整合 anyhow / ignore 依賴之核心配置
+        └── src/
+            ├── lib.rs       # Tauri 指令及事件生命週期管理
+            ├── main.rs      # 二進位進入點
+            └── scanner.rs   # 核心掃描模組，處理多執行緒走訪與正則匹配
 ```
 
 ## 安裝與執行
@@ -30,7 +35,7 @@ neo-fd/
 ### 1. 啟動桌面應用程式 (GUI)
 
 ```bash
-cd scanner-desktop
+cd neo-fd-desktop
 npm install
 npm run tauri dev
 ```
@@ -40,7 +45,7 @@ npm run tauri dev
 若要編譯桌面應用程式安裝檔：
 
 ```bash
-cd scanner-desktop
+cd neo-fd-desktop
 npm run tauri build
 ```
 
@@ -48,39 +53,8 @@ npm run tauri build
 `target/release/bundle/`
 
 
-## 整合核心引擎
-
-在其他 Rust 專案的 `Cargo.toml` 中加入相依路徑：
-
-```toml
-[dependencies]
-scanner-core = { path = "../neo-fd/scanner-core" }
-```
-
-接著在程式碼中呼叫：
-
-```rust
-use anyhow::Result;
-use regex::Regex;
-use scanner_core::Scanner;
-use std::path::PathBuf;
-
-fn main() -> Result<()> {
-    let patterns = vec![
-        ("自定義配對".to_string(), Regex::new(r"YOUR_REGEX_HERE")?)
-    ];
-    // 傳入回呼函數來處理掃描結果
-    let scanner = Scanner::new(patterns, |res| {
-        println!("[{}:{}] {}: {}", res.path, res.line_num, res.pattern_name, res.matched_text);
-    });
-    scanner.scan_dir(&PathBuf::from("/path/to/scan"));
-
-    Ok(())
-}
-```
-
 ## 開發規範
 
 *   **格式化**：提交前請執行 `cargo fmt`。
 *   **靜態檢查**：確保 `cargo clippy` 無警告。
-*   **核心原則**：桌面介面須妥善處理錯誤輸入；核心引擎保持零記憶體分配。
+*   **核心原則**：桌面介面與 IPC 層須妥善處理錯誤輸入，絕不 Panic；核心引擎保持零記憶體分配。

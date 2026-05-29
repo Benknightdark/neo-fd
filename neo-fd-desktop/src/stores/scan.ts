@@ -124,6 +124,11 @@ export const useScanStore = defineStore('scan', () => {
     }
   }
 
+  // 根據檔案路徑將掃描結果從 results 中過濾，用於檔案刪除後的即時 UI 同步
+  function removeResultsByPath(path: string) {
+    results.value = results.value.filter((r) => r.path !== path);
+  }
+
   return {
     scanPath,
     isScanning,
@@ -134,5 +139,6 @@ export const useScanStore = defineStore('scan', () => {
     startScan,
     init,
     cleanup,
+    removeResultsByPath,
   };
 });

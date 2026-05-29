@@ -1,5 +1,4 @@
-cd rust-scanner-workspace || exit 0
-cargo fmt --check
-cargo check
-cd scanner-desktop || exit 0
-npm run lint
+#!/usr/bin/env sh
+. "$(dirname -- "$0")/_/husky.sh"
+
+npm run lint:all

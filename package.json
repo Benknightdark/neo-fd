@@ -6,11 +6,11 @@
   "scripts": {
     "test": "npm run test:all",
     "prepare": "husky",
-    "lint:frontend": "npm run lint --prefix scanner-desktop",
-    "lint:rust": "cargo fmt --check && cargo clippy -- -D warnings",
+    "lint:frontend": "npm run lint --prefix neo-fd-desktop",
+    "lint:rust": "cd neo-fd-desktop/src-tauri && cargo fmt --check && cargo clippy -- -D warnings",
     "lint:all": "npm run lint:frontend && npm run lint:rust",
-    "test:frontend": "npm run test --prefix scanner-desktop -- --run",
-    "test:rust": "cargo test",
+    "test:frontend": "npm run test --prefix neo-fd-desktop -- --run",
+    "test:rust": "cd neo-fd-desktop/src-tauri && cargo test",
     "test:all": "npm run test:frontend && npm run test:rust"
   },
   "repository": {
