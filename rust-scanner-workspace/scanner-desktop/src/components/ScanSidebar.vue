@@ -1,33 +1,12 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue';
+import { computed } from 'vue';
 import { useScanStore } from '../stores/scan';
 
 const store = useScanStore();
 
-// 自定義正規表達式的語法錯誤訊息
-const regexError = ref('');
-
-// 監聽並即時校驗使用者自定義正規表達式 (Regex) 的語法正確性
-watch(
-  () => store.customPattern,
-  (val) => {
-    if (!val) {
-      regexError.value = '';
-      return;
-    }
-    try {
-      new RegExp(val);
-      regexError.value = '';
-    } catch (err) {
-      regexError.value = '正規表達式語法錯誤';
-    }
-  },
-);
-
-// 計算屬性守衛：確保至少選擇一個內建模式，或輸入了語法正確的自定義模式才可進行掃描
+// 計算屬性守衛：確保至少選擇一個內建模式，或輸入自定義模式才可進行掃描
 const canScan = computed(() => {
   if (store.isScanning) return false;
-  if (regexError.value) return false;
 
   const hasBuiltin = store.selectedPatterns.some((p) => p.enabled);
   const hasCustom = !!store.customPattern;
@@ -87,13 +66,7 @@ function handleScan() {
           type="text"
           placeholder="例如: [0-9]+"
           :disabled="store.isScanning"
-          :class="{ 'input-error': regexError }"
         />
-        <Transition name="fade">
-          <span v-if="regexError" class="error-msg" role="alert">
-            ⚠️ {{ regexError }}
-          </span>
-        </Transition>
       </div>
     </div>
 
@@ -166,22 +139,6 @@ input[type="text"]:disabled {
   cursor: not-allowed;
 }
 
-.input-error {
-  border-color: hsl(350, 80%, 55%) !important;
-}
-
-.input-error:focus {
-  box-shadow: 0 0 0 3px rgba(220, 53, 69, 0.15) !important;
-}
-
-.error-msg {
-  color: hsl(350, 80%, 45%);
-  font-size: 0.75rem;
-  font-weight: 500;
-  margin-top: 4px;
-  display: block;
-}
-
 .patterns-list {
   display: flex;
   flex-direction: column;
@@ -250,7 +207,7 @@ input[type="text"]:disabled {
   height: 16px;
   border: 2px solid rgba(255, 255, 255, 0.3);
   border-radius: 50%;
-  border-top-color: #white;
+  border-top-color: #fff;
   animation: spin 0.8s linear infinite;
 }
 
@@ -258,11 +215,4 @@ input[type="text"]:disabled {
   to { transform: rotate(360deg); }
 }
 
-.fade-enter-active, .fade-leave-active {
-  transition: opacity 0.2s ease;
-}
-
-.fade-enter-from, .fade-leave-to {
-  opacity: 0;
-}
 </style>
