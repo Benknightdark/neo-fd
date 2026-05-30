@@ -49,7 +49,7 @@ jobs:
 
   # 階段 2：平行編譯跨平台 Tauri 桌面安裝包，並上傳至 Draft Release
   build:
-    name: Build Tauri App (${{ matrix.os }})
+    name: Build Tauri App (${{ matrix.label }})
     needs: prepare
     runs-on: ${{ matrix.os }}
     # 給予寫入內容的權限，以便建立 Tag、上傳 Release 物件
@@ -58,7 +58,23 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
+        include:
+          - label: linux
+            os: ubuntu-latest
+            rust_target: ''
+            tauri_args: ''
+          - label: windows
+            os: windows-latest
+            rust_target: ''
+            tauri_args: ''
+          - label: macos-aarch64
+            os: macos-15
+            rust_target: aarch64-apple-darwin
+            tauri_args: --target aarch64-apple-darwin
+          - label: macos-x86_64
+            os: macos-15-intel
+            rust_target: x86_64-apple-darwin
+            tauri_args: --target x86_64-apple-darwin
         
     steps:
     # 步驟 1：檢出與 prepare 同步的 Git 狀態
@@ -98,31 +114,123 @@ jobs:
     # 步驟 4：設定 Rust 工具鏈
     - name: Setup Rust
       uses: dtolnay/rust-toolchain@stable
+
+    # 步驟 5：macOS 分架構建置時，先安裝對應 Rust target
+    - name: Add Rust Target
+      if: matrix.rust_target != ''
+      run: rustup target add ${{ matrix.rust_target }}
       
-    # 步驟 5：如果是 Linux 環境，安裝 Tauri 編譯所需的 Linux 相依套件
+    # 步驟 6：如果是 Linux 環境，安裝 Tauri 編譯所需的 Linux 相依套件
     - name: Install Linux Dependencies
       if: matrix.os == 'ubuntu-latest'
       run: |
         sudo apt-get update
         sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev
         
-    # 步驟 6：安裝前端打包所需的 npm 套件
+    # 步驟 7：安裝前端打包所需的 npm 套件
     - name: Install Frontend Dependencies
       working-directory: neo-fd-desktop
       run: npm ci
 
-    # 步驟 7：編譯跨平台 Tauri 桌面安裝包並上傳至 Draft Release (Tauri Action 會自動上傳二進位檔)
+    # 步驟 8：macOS 正式發布必須完成簽章與 notarization，缺少 secret 時直接中止避免產出壞包
+    - name: Validate macOS Signing Secrets
+      if: runner.os == 'macOS'
+      shell: bash
+      env:
+        APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+        APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+        APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+        APPLE_ID: ${{ secrets.APPLE_ID }}
+        APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+        APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+      run: |
+        missing=()
+        for name in APPLE_CERTIFICATE APPLE_CERTIFICATE_PASSWORD APPLE_SIGNING_IDENTITY APPLE_ID APPLE_PASSWORD APPLE_TEAM_ID; do
+          if [ -z "${!name}" ]; then
+            missing+=("$name")
+          fi
+        done
+
+        if [ "${#missing[@]}" -ne 0 ]; then
+          echo "::error::Missing required macOS signing secret(s): ${missing[*]}"
+          exit 1
+        fi
+
+    # 步驟 9：將 Developer ID Application 憑證匯入暫時 keychain，供 codesign 與 notarization 使用
+    - name: Import Apple Developer Certificate
+      if: runner.os == 'macOS'
+      shell: bash
+      env:
+        APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+        APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+        APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+      run: |
+        certificate_path="$RUNNER_TEMP/apple-certificate.p12"
+        keychain_path="$RUNNER_TEMP/app-signing.keychain-db"
+        keychain_password="$(uuidgen)"
+
+        echo "::add-mask::$keychain_password"
+        echo "$APPLE_CERTIFICATE" | base64 --decode > "$certificate_path"
+
+        security create-keychain -p "$keychain_password" "$keychain_path"
+        security set-keychain-settings -lut 21600 "$keychain_path"
+        security unlock-keychain -p "$keychain_password" "$keychain_path"
+        security import "$certificate_path" \
+          -k "$keychain_path" \
+          -P "$APPLE_CERTIFICATE_PASSWORD" \
+          -T /usr/bin/codesign \
+          -T /usr/bin/security
+        security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$keychain_password" "$keychain_path"
+        security list-keychains -d user -s "$keychain_path"
+        security default-keychain -s "$keychain_path"
+
+        security find-identity -v -p codesigning "$keychain_path"
+        if ! security find-identity -v -p codesigning "$keychain_path" | grep -Fq "\"$APPLE_SIGNING_IDENTITY\""; then
+          echo "::error::APPLE_SIGNING_IDENTITY was not found in the imported certificate."
+          exit 1
+        fi
+
+    # 步驟 10：編譯跨平台 Tauri 桌面安裝包並上傳至 Draft Release (Tauri Action 會自動上傳二進位檔)
     - name: Build and Upload Tauri Release
       uses: tauri-apps/tauri-action@v0
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+        APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+        APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+        APPLE_ID: ${{ secrets.APPLE_ID }}
+        APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+        APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        APPLE_PROVIDER_SHORT_NAME: ${{ secrets.APPLE_PROVIDER_SHORT_NAME }}
       with:
         projectPath: neo-fd-desktop
+        args: ${{ matrix.tauri_args }}
         tagName: ${{ needs.prepare.outputs.tag }}
         releaseName: "Neo FD ${{ needs.prepare.outputs.tag }}"
         releaseBody: "自動發布版本 ${{ needs.prepare.outputs.tag }}。請從下方下載對應系統的安裝檔。"
         releaseDraft: true # 保持為草稿狀態，等待所有平台編譯完成後統一發布
         prerelease: false
+
+    # 步驟 11：macOS 發布前驗證簽章與 notarization，避免公開無法開啟的 DMG
+    - name: Verify macOS Signing and Notarization
+      if: runner.os == 'macOS'
+      shell: bash
+      run: |
+        app_path="$(find neo-fd-desktop/src-tauri/target -path '*/release/bundle/macos/neo-fd-desktop.app' -print -quit)"
+        dmg_path="$(find neo-fd-desktop/src-tauri/target -path '*/release/bundle/dmg/*.dmg' -print -quit)"
+
+        if [ -z "$app_path" ]; then
+          echo "::error::Cannot find bundled macOS app."
+          exit 1
+        fi
+
+        codesign --verify --deep --strict --verbose=2 "$app_path"
+        spctl --assess --type execute --verbose "$app_path"
+        xcrun stapler validate "$app_path"
+
+        if [ -n "$dmg_path" ]; then
+          xcrun stapler validate "$dmg_path"
+        fi
 
   # 階段 3：自動生成變更日誌，並一鍵公開發布 Release (在 build 完成後觸發)
   publish:
