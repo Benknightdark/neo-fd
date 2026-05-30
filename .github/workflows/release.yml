@@ -132,8 +132,9 @@ jobs:
       working-directory: neo-fd-desktop
       run: npm ci
 
-    # 步驟 8：macOS 正式發布必須完成簽章與 notarization，缺少 secret 時直接中止避免產出壞包
-    - name: Validate macOS Signing Secrets
+    # 步驟 8：檢查 macOS 簽章設定；缺少 secret 時跳過 macOS 產物，避免產出無法開啟的 DMG
+    - name: Check macOS Signing Secrets
+      id: macos_signing
       if: runner.os == 'macOS'
       shell: bash
       env:
@@ -152,13 +153,22 @@ jobs:
         done
 
         if [ "${#missing[@]}" -ne 0 ]; then
-          echo "::error::Missing required macOS signing secret(s): ${missing[*]}"
-          exit 1
+          echo "ready=false" >> "$GITHUB_OUTPUT"
+          echo "::warning::Skipping macOS release artifact because required signing secret(s) are missing: ${missing[*]}"
+          {
+            echo "### macOS release artifact skipped"
+            echo ""
+            echo "Missing required signing secret(s): \`${missing[*]}\`."
+            echo "Windows and Linux artifacts can still be published. Add the Apple Developer secrets to enable signed and notarized macOS DMG builds."
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit 0
         fi
+
+        echo "ready=true" >> "$GITHUB_OUTPUT"
 
     # 步驟 9：將 Developer ID Application 憑證匯入暫時 keychain，供 codesign 與 notarization 使用
     - name: Import Apple Developer Certificate
-      if: runner.os == 'macOS'
+      if: runner.os == 'macOS' && steps.macos_signing.outputs.ready == 'true'
       shell: bash
       env:
         APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
@@ -192,6 +202,7 @@ jobs:
 
     # 步驟 10：編譯跨平台 Tauri 桌面安裝包並上傳至 Draft Release (Tauri Action 會自動上傳二進位檔)
     - name: Build and Upload Tauri Release
+      if: runner.os != 'macOS' || steps.macos_signing.outputs.ready == 'true'
       uses: tauri-apps/tauri-action@v0
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -213,7 +224,7 @@ jobs:
 
     # 步驟 11：macOS 發布前驗證簽章與 notarization，避免公開無法開啟的 DMG
     - name: Verify macOS Signing and Notarization
-      if: runner.os == 'macOS'
+      if: runner.os == 'macOS' && steps.macos_signing.outputs.ready == 'true'
       shell: bash
       run: |
         app_path="$(find neo-fd-desktop/src-tauri/target -path '*/release/bundle/macos/neo-fd-desktop.app' -print -quit)"
