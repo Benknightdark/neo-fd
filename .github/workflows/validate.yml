@@ -6,8 +6,8 @@ on:
   push:
     branches: [ develop ]
   # 當對 main, master, develop 分支開立 PR 時觸發
-  pull_request:
-    branches: [ main, master, develop ]
+  # pull_request:
+  #   branches: [ main, master, develop ]
 
 jobs:
   # Job 1：執行 Rust 程式碼檢查與測試
