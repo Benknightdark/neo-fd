@@ -132,18 +132,37 @@ jobs:
       working-directory: neo-fd-desktop
       run: npm ci
 
-    # 步驟 8：編譯跨平台 Tauri 桌面安裝包並上傳至 Draft Release (Tauri Action 會自動上傳二進位檔)
-    - name: Build and Upload Tauri Release
-      uses: tauri-apps/tauri-action@v0
+    # 步驟 7.5：檢查是否有配置 Apple 憑證的 Secrets。若有，則將其導出至 GitHub 環境變數中以供 tauri-action 啟用簽署
+    - name: Configure Apple Codesigning
+      if: startsWith(matrix.os, 'macos')
+      shell: bash
       env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        # 注入 Apple 簽署與公證所需之環境變數，方便未來設定 Secret 後直接啟用
         APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
         APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
         APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
         APPLE_ID: ${{ secrets.APPLE_ID }}
         APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
         APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+      run: |
+        if [ -n "$APPLE_CERTIFICATE" ]; then
+          echo "APPLE_CERTIFICATE<<EOF" >> $GITHUB_ENV
+          echo "$APPLE_CERTIFICATE" >> $GITHUB_ENV
+          echo "EOF" >> $GITHUB_ENV
+          echo "APPLE_CERTIFICATE_PASSWORD=$APPLE_CERTIFICATE_PASSWORD" >> $GITHUB_ENV
+          echo "APPLE_SIGNING_IDENTITY=$APPLE_SIGNING_IDENTITY" >> $GITHUB_ENV
+          echo "APPLE_ID=$APPLE_ID" >> $GITHUB_ENV
+          echo "APPLE_PASSWORD=$APPLE_PASSWORD" >> $GITHUB_ENV
+          echo "APPLE_TEAM_ID=$APPLE_TEAM_ID" >> $GITHUB_ENV
+          echo "Apple codesigning credentials configured."
+        else
+          echo "Apple codesigning credentials not found. Building unsigned/ad-hoc signed macOS app."
+        fi
+
+    # 步驟 8：編譯跨平台 Tauri 桌面安裝包並上傳至 Draft Release (Tauri Action 會自動上傳二進位檔)
+    - name: Build and Upload Tauri Release
+      uses: tauri-apps/tauri-action@v0
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       with:
         projectPath: neo-fd-desktop
         args: ${{ matrix.tauri_args }}
