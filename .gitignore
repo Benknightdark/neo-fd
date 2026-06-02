@@ -166,4 +166,4 @@ dist
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 .vite/
-.antigravitycli/862c21c0-6053-498b-88d0-1bdc0985db4c.json
+.antigravitycli/*
