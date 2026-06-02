@@ -137,14 +137,34 @@ jobs:
       uses: tauri-apps/tauri-action@v0
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        # 注入 Apple 簽署與公證所需之環境變數，方便未來設定 Secret 後直接啟用
+        APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+        APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+        APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+        APPLE_ID: ${{ secrets.APPLE_ID }}
+        APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+        APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
       with:
         projectPath: neo-fd-desktop
         args: ${{ matrix.tauri_args }}
         tagName: ${{ needs.prepare.outputs.tag }}
         releaseName: "Neo FD ${{ needs.prepare.outputs.tag }}"
-        releaseBody: "自動發布版本 ${{ needs.prepare.outputs.tag }}。請從下方下載對應系統的安裝檔。"
+        releaseBody: |
+          自動發布版本 ${{ needs.prepare.outputs.tag }}。請從下方下載對應系統的安裝檔。
+
+          ### ⚠️ macOS 使用者安裝說明 (M系列晶片 / Intel 晶片)
+          如果您在下載並打開 `.dmg` 或 `.app` 安裝檔時，遇到系統提示 **「已損壞，無法開啟。您應該將它移至垃圾桶」** 或 **「無法確認開發者」**，此為 macOS Gatekeeper 的安全限制（因未配置付費 Apple 開發者憑證所致）。請依照下列步驟快速解除限制：
+
+          1. 將應用程式拖移或解壓放入 **「應用程式 (Applications)」** 資料夾。
+          2. 開啟 **「終端機 (Terminal)」** 應用程式。
+          3. 輸入以下指令並按 Enter 鍵（可能需要輸入您的 Mac 開機密碼）：
+             ```bash
+             sudo xattr -cr /Applications/neo-fd-desktop.app
+             ```
+          4. 重新雙擊開啟應用程式即可正常執行。
         releaseDraft: true # 保持為草稿狀態，等待所有平台編譯完成後統一發布
         prerelease: false
+
 
   # 階段 3：自動生成變更日誌，並一鍵公開發布 Release (在 build 完成後觸發)
   publish:

@@ -71,6 +71,21 @@ npm run tauri build
 
 打包輸出位於 Tauri 的 `target/release/bundle/`。
 
+## macOS 安裝疑難排解 (M系列晶片 / Intel 晶片)
+
+由於本專案發布的安裝檔尚未配置付費 Apple 開發者憑證，當您從 GitHub 下載安裝檔並打開時，macOS 系統可能會跳出 **「已損壞，無法開啟。您應該將它移至垃圾桶」** 或 **「無法確認開發者」** 的 Gatekeeper 警告。
+
+這並非檔案實際損壞，請依照下列步驟快速解除 macOS 系統的下載隔離限制：
+
+1. 將解壓後的 `neo-fd-desktop.app` 或由 DMG 拖出的應用程式放入 **「應用程式」 (Applications)** 資料夾中。
+2. 打開 Mac 的 **「終端機」 (Terminal)**。
+3. 執行以下指令以清除下載隔離屬性：
+   ```bash
+   sudo xattr -cr /Applications/neo-fd-desktop.app
+   ```
+4. 重新雙擊點擊應用程式即可正常開啟。
+
+
 ## 開發重點
 
 - 前端 UI 位於 `neo-fd-desktop/src/`。
