@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { open } from '@tauri-apps/plugin-dialog';
 import { computed } from 'vue';
 import { useScanStore } from '../stores/scan';
 
@@ -19,6 +20,23 @@ function handleScan() {
   if (!canScan.value) return;
   store.startScan();
 }
+
+// 開啟資料夾選擇對話框並更新掃描路徑
+async function handleSelectDir() {
+  try {
+    const selected = await open({
+      directory: true,
+      multiple: false,
+      defaultPath: store.scanPath || undefined,
+      title: '選擇掃描目標資料夾',
+    });
+    if (selected) {
+      store.scanPath = Array.isArray(selected) ? selected[0] : selected;
+    }
+  } catch (err) {
+    console.error('無法選取資料夾:', err);
+  }
+}
 </script>
 
 <template>
@@ -29,13 +47,35 @@ function handleScan() {
 
     <div class="field">
       <label for="scan-path">目標路徑</label>
-      <input
-        id="scan-path"
-        v-model="store.scanPath"
-        type="text"
-        placeholder="例如: /Users/name/Documents"
-        :disabled="store.isScanning"
-      />
+      <div class="input-with-button">
+        <input
+          id="scan-path"
+          v-model="store.scanPath"
+          type="text"
+          placeholder="例如: /Users/name/Documents"
+          :disabled="store.isScanning"
+        />
+        <button
+          type="button"
+          class="select-dir-btn"
+          @click="handleSelectDir"
+          :disabled="store.isScanning"
+          title="選擇資料夾"
+        >
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            class="folder-icon"
+          >
+            <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
+          </svg>
+        </button>
+      </div>
     </div>
 
     <div class="field">
@@ -137,6 +177,55 @@ input[type="text"]:disabled {
   background: #f8f9fa;
   color: #adb5bd;
   cursor: not-allowed;
+}
+
+.input-with-button {
+  display: flex;
+  gap: 8px;
+  align-items: stretch;
+}
+
+.input-with-button input[type="text"] {
+  flex: 1;
+  min-width: 0;
+}
+
+.select-dir-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  border: 1px solid #dee2e6;
+  border-radius: 8px;
+  background: #fff;
+  cursor: pointer;
+  transition: all 0.2s ease-in-out;
+  color: #7f8c8d;
+  flex-shrink: 0;
+}
+
+.select-dir-btn:hover:not(:disabled) {
+  border-color: #007bff;
+  color: #007bff;
+  background: #f0f7ff;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 8px rgba(0, 123, 255, 0.1);
+}
+
+.select-dir-btn:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.select-dir-btn:disabled {
+  background: #f8f9fa;
+  color: #adb5bd;
+  cursor: not-allowed;
+  border-color: #e9ecef;
+}
+
+.folder-icon {
+  width: 18px;
+  height: 18px;
 }
 
 .patterns-list {
