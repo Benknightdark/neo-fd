@@ -92,30 +92,8 @@ cd neo-fd-desktop
 npm run tauri build
 ```
 
-## 6. 新增掃描規則
 
-- 預設規則位於 `neo-fd-desktop/src/stores/scan.ts`。
-- 後端掃描與比對行為位於 `neo-fd-desktop/src-tauri/src/scanner.rs`。
-- 新增規則時要同步處理前端顯示、Regex 語法驗證、後端測試與錯誤訊息。
-- 測試資料只能使用虛擬資料，嚴禁放入真實身分證字號、姓名、電話、信用卡號或其他個資。
-
-## 7. CI/CD 與提交規範
-
-- `.github/workflows/validate.yml` 會在 `develop` push 與 PR 執行前後端檢查。
-- `.github/workflows/release.yml` 會在 `main`、`master` 或 `v*` tag 觸發打包與 Release。
-- Commit message 必須符合 Conventional Commits 1.0.0，格式為 `<type>[optional scope]: <description>`。
-- Commit message 使用正體中文描述，且每個 commit 只包含單一邏輯變更。
-- 不要加入 `Co-authored-by` 或任何 AI attribution trailer。
-
-範例：
-
-```text
-docs(readme): 簡化專案使用說明
-fix(scanner): 處理無法讀取檔案時的錯誤回傳
-feat(scan): 新增自訂規則啟用狀態
-```
-
-## 8. 完成前檢查
+## 6. 完成前檢查
 
 - 確認修改範圍符合使用者需求。
 - 文件或程式碼要符合實際專案結構。
