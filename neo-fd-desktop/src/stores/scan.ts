@@ -4,7 +4,7 @@ import { ref, shallowRef } from 'vue';
 import { type ScanResult, scannerApi } from '../api/ipc';
 import { useNotificationStore } from './notification';
 
-// 核心掃描狀態 Store，處理掃描設定、批次 Buffer 與 Tauri IPC 監聽
+// 核心掃描狀態 Store，處理掃描設定、Tauri IPC 監聽與中止機制
 export const useScanStore = defineStore('scan', () => {
   // 掃描目標目錄路徑
   const scanPath = ref('');
@@ -29,21 +29,9 @@ export const useScanStore = defineStore('scan', () => {
   const customPattern = ref('');
   const customName = ref('自定義');
 
-  // 定期批次寫入緩衝區，避免大量即時 IPC 結果導致 UI 渲染卡頓
-  let resultBuffer: ScanResult[] = [];
-  let batchTimer: ReturnType<typeof setInterval> | null = null;
-
   // 儲存 Tauri 事件登出控制代碼，防止記憶體洩漏
   let unlistenResult: (() => void) | null = null;
   let unlistenFinished: (() => void) | null = null;
-
-  // 將 Buffer 中的資料一次性寫入響應式 results，每 100ms 觸發一次
-  function flushBuffer() {
-    if (resultBuffer.length > 0) {
-      results.value = [...results.value, ...resultBuffer];
-      resultBuffer = [];
-    }
-  }
 
   // 啟動掃描程序
   async function startScan() {
@@ -68,21 +56,23 @@ export const useScanStore = defineStore('scan', () => {
     results.value = [];
     isScanning.value = true;
 
-    // 清理舊定時器並重新啟動
-    if (batchTimer) {
-      clearInterval(batchTimer);
-    }
-    batchTimer = setInterval(flushBuffer, 100);
-
     try {
       // 呼叫 Rust 後端開始掃描
       await scannerApi.startScan(scanPath.value || '/', activePatterns);
     } catch (err) {
       isScanning.value = false;
-      if (batchTimer) {
-        clearInterval(batchTimer);
-        batchTimer = null;
-      }
+    }
+  }
+
+  // 中止掃描程序
+  async function cancelScan() {
+    if (!isScanning.value) return;
+    try {
+      await scannerApi.cancelScan();
+      const notification = useNotificationStore();
+      notification.add('正在中止掃描...', 'warning');
+    } catch (err) {
+      console.error('無法中止掃描:', err);
     }
   }
 
@@ -90,19 +80,17 @@ export const useScanStore = defineStore('scan', () => {
   async function init() {
     if (unlistenResult || unlistenFinished) return;
 
-    // 監聽單筆掃描結果事件，暫存於 Buffer 中
-    unlistenResult = await listen<ScanResult>('scan-result', (event) => {
-      resultBuffer.push(event.payload);
-    });
+    // 監聽後端批次掃描結果事件 (傳入資料為 ScanResult 陣列)
+    unlistenResult = await listen<ScanResult[]>(
+      'scan-result-batch',
+      (event) => {
+        results.value = [...results.value, ...event.payload];
+      },
+    );
 
-    // 監聽掃描完畢事件，進行最終 Flush 與清理
+    // 監聽掃描完畢事件
     unlistenFinished = await listen('scan-finished', () => {
       isScanning.value = false;
-      flushBuffer();
-      if (batchTimer) {
-        clearInterval(batchTimer);
-        batchTimer = null;
-      }
       const notification = useNotificationStore();
       notification.add('掃描已完成', 'success');
     });
@@ -117,10 +105,6 @@ export const useScanStore = defineStore('scan', () => {
     if (unlistenFinished) {
       unlistenFinished();
       unlistenFinished = null;
-    }
-    if (batchTimer) {
-      clearInterval(batchTimer);
-      batchTimer = null;
     }
   }
 
@@ -137,6 +121,7 @@ export const useScanStore = defineStore('scan', () => {
     customPattern,
     customName,
     startScan,
+    cancelScan,
     init,
     cleanup,
     removeResultsByPath,

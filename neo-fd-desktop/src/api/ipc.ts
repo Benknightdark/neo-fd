@@ -12,6 +12,12 @@ export interface TauriCommands {
     // biome-ignore lint/suspicious/noConfusingVoidType: void represents command without return value
     return: void;
   };
+  // 中止目錄掃描
+  cancel_scan: {
+    args: Record<string, never>;
+    // biome-ignore lint/suspicious/noConfusingVoidType: void represents command without return value
+    return: void;
+  };
   // 讀取指定檔案內容
   read_file_content: {
     args: { path: string };
@@ -109,6 +115,8 @@ export const scannerApi = {
   // 開始目錄掃描
   startScan: (path: string, patterns: [string, string][]) =>
     safeInvoke('scan_directory', { path, patterns }),
+  // 中止目錄掃描
+  cancelScan: () => safeInvoke('cancel_scan', {}),
   // 載入特定檔案內容以供 Code Viewer 渲染
   readFileContent: (path: string) => safeInvoke('read_file_content', { path }),
   // 寫入檔案內容以進行修正

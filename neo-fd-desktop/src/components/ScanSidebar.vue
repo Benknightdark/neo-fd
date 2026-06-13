@@ -111,12 +111,20 @@ async function handleSelectDir() {
     </div>
 
     <button
+      v-if="store.isScanning"
+      class="scan-btn cancel-btn"
+      @click="store.cancelScan"
+    >
+      <span class="spinner"></span>
+      停止掃描
+    </button>
+    <button
+      v-else
       class="scan-btn"
       @click="handleScan"
       :disabled="!canScan"
     >
-      <span v-if="store.isScanning" class="spinner"></span>
-      {{ store.isScanning ? '掃描中...' : '開始掃描' }}
+      開始掃描
     </button>
   </aside>
 </template>
@@ -289,6 +297,16 @@ input[type="text"]:disabled {
   color: #ced4da;
   cursor: not-allowed;
   box-shadow: none;
+}
+
+.scan-btn.cancel-btn {
+  background: linear-gradient(135deg, #dc3545, #bd2130);
+  box-shadow: 0 4px 12px rgba(220, 53, 69, 0.25);
+}
+
+.scan-btn.cancel-btn:hover {
+  background: linear-gradient(135deg, #c82333, #bd2130);
+  box-shadow: 0 6px 16px rgba(220, 53, 69, 0.35);
 }
 
 .spinner {

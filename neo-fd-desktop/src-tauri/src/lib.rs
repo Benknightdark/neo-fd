@@ -1,31 +1,104 @@
 use regex::Regex;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 mod scanner;
 use scanner::Scanner;
 use tauri::Emitter;
 
+#[derive(Default)]
+struct AppScanState {
+    aborted: Arc<AtomicBool>,
+}
+
 #[tauri::command]
 async fn scan_directory(
     app: tauri::AppHandle,
+    state: tauri::State<'_, AppScanState>,
     path: String,
     patterns: Vec<(String, String)>,
 ) -> Result<(), String> {
     let mut regex_patterns = Vec::new();
     for (name, p) in patterns {
         let re = Regex::new(&p).map_err(|e| e.to_string())?;
-        regex_patterns.push((name, re));
+        let name_arc: Arc<str> = Arc::from(name.as_str());
+        regex_patterns.push((name_arc, re));
     }
 
-    let app_clone = app.clone();
-    let scanner = Scanner::new(regex_patterns, move |res| {
-        let _ = app_clone.emit("scan-result", res);
-    });
+    // 重設中止狀態
+    state.aborted.store(false, Ordering::Relaxed);
+
+    let aborted_scanner = Arc::clone(&state.aborted);
+    let (tx, rx) = std::sync::mpsc::channel::<scanner::ScanResult>();
+
+    let scanner = Scanner::new(
+        regex_patterns,
+        move |res| {
+            let _ = tx.send(res);
+        },
+        aborted_scanner,
+    );
 
     let scan_path = std::path::PathBuf::from(path);
+    let app_clone = app.clone();
+
+    // 啟動背景工作執行緒群組
     std::thread::spawn(move || {
-        scanner.scan_dir(&scan_path);
-        let _ = app.emit("scan-finished", ());
+        // 啟動掃描執行緒
+        let scan_handle = std::thread::spawn(move || {
+            scanner.scan_dir(&scan_path);
+        });
+
+        // 收集執行緒：從 rx 中讀取結果，並進行 100ms / 100筆 批次發送
+        let mut batch = Vec::new();
+        let mut last_emit = std::time::Instant::now();
+
+        loop {
+            let timeout = std::time::Duration::from_millis(100)
+                .checked_sub(last_emit.elapsed())
+                .unwrap_or(std::time::Duration::ZERO);
+
+            match rx.recv_timeout(timeout) {
+                Ok(res) => {
+                    batch.push(res);
+                    if batch.len() >= 100
+                        || last_emit.elapsed() >= std::time::Duration::from_millis(100)
+                    {
+                        let _ = app_clone.emit("scan-result-batch", &batch);
+                        batch.clear();
+                        last_emit = std::time::Instant::now();
+                    }
+                }
+                Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
+                    if !batch.is_empty() {
+                        let _ = app_clone.emit("scan-result-batch", &batch);
+                        batch.clear();
+                    }
+                    last_emit = std::time::Instant::now();
+                }
+                Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => {
+                    break;
+                }
+            }
+        }
+
+        // 發送剩餘的最後一批結果
+        if !batch.is_empty() {
+            let _ = app_clone.emit("scan-result-batch", &batch);
+        }
+
+        // 等待掃描執行緒結束 (通常此時已結束)
+        let _ = scan_handle.join();
+
+        // 觸發掃描結束事件
+        let _ = app_clone.emit("scan-finished", ());
     });
 
+    Ok(())
+}
+
+#[tauri::command]
+async fn cancel_scan(state: tauri::State<'_, AppScanState>) -> Result<(), String> {
+    state.aborted.store(true, Ordering::Relaxed);
     Ok(())
 }
 
@@ -82,10 +155,12 @@ async fn delete_file(path: String) -> Result<(), String> {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .manage(AppScanState::default())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
             scan_directory,
+            cancel_scan,
             read_file_content,
             write_file_content,
             delete_file
