@@ -26,18 +26,25 @@ where
     on_match: Arc<F>,
     aborted: Arc<AtomicBool>,
     match_count: Arc<AtomicUsize>,
+    max_results: Option<usize>,
 }
 
 impl<F> Scanner<F>
 where
     F: Fn(ScanResult) + Send + Sync + 'static,
 {
-    pub fn new(patterns: Vec<(Arc<str>, Regex)>, on_match: F, aborted: Arc<AtomicBool>) -> Self {
+    pub fn new(
+        patterns: Vec<(Arc<str>, Regex)>,
+        on_match: F,
+        aborted: Arc<AtomicBool>,
+        max_results: Option<usize>,
+    ) -> Self {
         Self {
             patterns,
             on_match: Arc::new(on_match),
             aborted,
             match_count: Arc::new(AtomicUsize::new(0)),
+            max_results,
         }
     }
 
@@ -46,6 +53,7 @@ where
         let on_match = Arc::clone(&self.on_match);
         let aborted = Arc::clone(&self.aborted);
         let match_count = Arc::clone(&self.match_count);
+        let max_results = self.max_results;
 
         let walker = WalkBuilder::new(path)
             .hidden(false)
@@ -71,7 +79,14 @@ where
 
                 let path = entry.path();
                 if path.is_file() {
-                    let _ = scan_file(path, &patterns, &*on_match, &aborted, &match_count);
+                    let _ = scan_file(
+                        path,
+                        &patterns,
+                        &*on_match,
+                        &aborted,
+                        &match_count,
+                        max_results,
+                    );
                 }
 
                 WalkState::Continue
@@ -99,6 +114,7 @@ fn scan_file<F>(
     on_match: &F,
     aborted: &AtomicBool,
     match_count: &AtomicUsize,
+    max_results: Option<usize>,
 ) -> Result<()>
 where
     F: Fn(ScanResult) + Send + Sync + 'static,
@@ -149,11 +165,13 @@ where
                         break;
                     }
                     for mat in re.find_iter(&line_str) {
-                        // 增加匹配計數，若達到 10,000 筆限制則自動觸發中止
-                        let count = match_count.fetch_add(1, Ordering::Relaxed);
-                        if count >= 10000 {
-                            aborted.store(true, Ordering::Relaxed);
-                            break;
+                        if let Some(max_results) = max_results {
+                            // 若使用者設定最大匹配筆數，達到限制後自動觸發中止
+                            let count = match_count.fetch_add(1, Ordering::Relaxed);
+                            if count >= max_results {
+                                aborted.store(true, Ordering::Relaxed);
+                                break;
+                            }
                         }
 
                         on_match(ScanResult {
@@ -171,4 +189,79 @@ where
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+    use std::sync::Mutex;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    fn temp_file_path(name: &str) -> std::path::PathBuf {
+        let timestamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|duration| duration.as_nanos())
+            .unwrap_or_default();
+
+        std::env::temp_dir().join(format!(
+            "neo_fd_scanner_{name}_{}_{}",
+            std::process::id(),
+            timestamp
+        ))
+    }
+
+    fn scan_temp_file(path: &Path, max_results: Option<usize>) -> Result<Vec<ScanResult>> {
+        let patterns = vec![(Arc::<str>::from("測試"), Regex::new("secret")?)];
+        let aborted = AtomicBool::new(false);
+        let match_count = AtomicUsize::new(0);
+        let results = Arc::new(Mutex::new(Vec::new()));
+        let captured_results = Arc::clone(&results);
+
+        scan_file(
+            path,
+            &patterns,
+            &move |result| {
+                if let Ok(mut results) = captured_results.lock() {
+                    results.push(result);
+                }
+            },
+            &aborted,
+            &match_count,
+            max_results,
+        )?;
+
+        let results = results
+            .lock()
+            .map(|results| results.clone())
+            .unwrap_or_default();
+
+        Ok(results)
+    }
+
+    #[test]
+    fn scan_file_without_max_results_returns_all_matches() -> Result<()> {
+        let path = temp_file_path("unlimited.txt");
+        fs::write(&path, "secret\nsecret\nsecret\n")?;
+
+        let results = scan_temp_file(&path, None)?;
+        let _ = fs::remove_file(&path);
+
+        assert_eq!(results.len(), 3);
+
+        Ok(())
+    }
+
+    #[test]
+    fn scan_file_with_max_results_stops_after_limit() -> Result<()> {
+        let path = temp_file_path("limited.txt");
+        fs::write(&path, "secret\nsecret\nsecret\n")?;
+
+        let results = scan_temp_file(&path, Some(2))?;
+        let _ = fs::remove_file(&path);
+
+        assert_eq!(results.len(), 2);
+
+        Ok(())
+    }
 }

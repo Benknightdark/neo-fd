@@ -8,7 +8,11 @@ import { useNotificationStore } from '../stores/notification';
 export interface TauriCommands {
   // 啟動目錄掃描
   scan_directory: {
-    args: { path: string; patterns: [string, string][] };
+    args: {
+      path: string;
+      patterns: [string, string][];
+      maxResults: number | null;
+    };
     // biome-ignore lint/suspicious/noConfusingVoidType: void represents command without return value
     return: void;
   };
@@ -113,8 +117,11 @@ export interface ScanResult {
  */
 export const scannerApi = {
   // 開始目錄掃描
-  startScan: (path: string, patterns: [string, string][]) =>
-    safeInvoke('scan_directory', { path, patterns }),
+  startScan: (
+    path: string,
+    patterns: [string, string][],
+    maxResults: number | null,
+  ) => safeInvoke('scan_directory', { path, patterns, maxResults }),
   // 中止目錄掃描
   cancelScan: () => safeInvoke('cancel_scan', {}),
   // 載入特定檔案內容以供 Code Viewer 渲染

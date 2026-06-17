@@ -29,9 +29,26 @@ export const useScanStore = defineStore('scan', () => {
   const customPattern = ref('');
   const customName = ref('自定義');
 
+  // 最大匹配結果數；空字串代表不限制
+  const maxResultsInput = ref('');
+
   // 儲存 Tauri 事件登出控制代碼，防止記憶體洩漏
   let unlistenResult: (() => void) | null = null;
   let unlistenFinished: (() => void) | null = null;
+
+  function normalizeMaxResults(value: string): number | null {
+    const trimmed = value.trim();
+    if (!trimmed) {
+      return null;
+    }
+
+    const maxResults = Number(trimmed);
+    if (!Number.isInteger(maxResults) || maxResults <= 0) {
+      throw new Error('最大匹配筆數必須是大於 0 的整數');
+    }
+
+    return maxResults;
+  }
 
   // 啟動掃描程序
   async function startScan() {
@@ -53,12 +70,25 @@ export const useScanStore = defineStore('scan', () => {
       return;
     }
 
+    const notification = useNotificationStore();
+    let maxResults: number | null;
+    try {
+      maxResults = normalizeMaxResults(maxResultsInput.value);
+    } catch (err) {
+      notification.add((err as Error).message, 'warning');
+      return;
+    }
+
     results.value = [];
     isScanning.value = true;
 
     try {
       // 呼叫 Rust 後端開始掃描
-      await scannerApi.startScan(scanPath.value || '/', activePatterns);
+      await scannerApi.startScan(
+        scanPath.value || '/',
+        activePatterns,
+        maxResults,
+      );
     } catch (err) {
       isScanning.value = false;
     }
@@ -120,6 +150,8 @@ export const useScanStore = defineStore('scan', () => {
     selectedPatterns,
     customPattern,
     customName,
+    maxResultsInput,
+    normalizeMaxResults,
     startScan,
     cancelScan,
     init,
