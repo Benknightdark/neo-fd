@@ -16,6 +16,7 @@ async fn scan_directory(
     state: tauri::State<'_, AppScanState>,
     path: String,
     patterns: Vec<(String, String)>,
+    max_results: Option<usize>,
 ) -> Result<(), String> {
     let mut regex_patterns = Vec::new();
     for (name, p) in patterns {
@@ -36,6 +37,7 @@ async fn scan_directory(
             let _ = tx.send(res);
         },
         aborted_scanner,
+        max_results,
     );
 
     let scan_path = std::path::PathBuf::from(path);

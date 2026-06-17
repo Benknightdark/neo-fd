@@ -110,6 +110,22 @@ async function handleSelectDir() {
       </div>
     </div>
 
+    <div class="field">
+      <label for="max-results">最大匹配筆數</label>
+      <div class="input-wrapper">
+        <input
+          id="max-results"
+          v-model="store.maxResultsInput"
+          type="number"
+          min="1"
+          step="1"
+          inputmode="numeric"
+          placeholder="留空代表不限"
+          :disabled="store.isScanning"
+        />
+      </div>
+    </div>
+
     <button
       v-if="store.isScanning"
       class="scan-btn cancel-btn"
@@ -163,7 +179,8 @@ async function handleSelectDir() {
   letter-spacing: 0.5px;
 }
 
-input[type="text"] {
+input[type="text"],
+input[type="number"] {
   padding: 10px 12px;
   border: 1px solid #dee2e6;
   border-radius: 8px;
@@ -175,13 +192,15 @@ input[type="text"] {
   box-sizing: border-box;
 }
 
-input[type="text"]:focus {
+input[type="text"]:focus,
+input[type="number"]:focus {
   border-color: #007bff;
   box-shadow: 0 0 0 3px rgba(0, 123, 255, 0.15);
   outline: none;
 }
 
-input[type="text"]:disabled {
+input[type="text"]:disabled,
+input[type="number"]:disabled {
   background: #f8f9fa;
   color: #adb5bd;
   cursor: not-allowed;

@@ -19,28 +19,28 @@
     "test:all": "npm run test && npm run test:rust"
   },
   "dependencies": {
-    "@tauri-apps/api": "^2",
+    "@tauri-apps/api": "^2.11.0",
     "@tauri-apps/plugin-dialog": "^2.7.1",
-    "@tauri-apps/plugin-opener": "^2",
+    "@tauri-apps/plugin-opener": "^2.5.4",
     "@vueuse/core": "^14.3.0",
     "pinia": "^3.0.4",
-    "vue": "^3.5.13"
+    "vue": "^3.5.38"
   },
   "devDependencies": {
-    "@biomejs/biome": "^2.4.15",
-    "@commitlint/cli": "^21.0.1",
-    "@commitlint/config-conventional": "^21.0.1",
-    "@playwright/test": "^1.60.0",
-    "@tailwindcss/vite": "^4.3.0",
-    "@tauri-apps/cli": "^2",
-    "@vitejs/plugin-vue": "^5.2.1",
-    "@vue/test-utils": "^2.4.10",
+    "@biomejs/biome": "^2.5.0",
+    "@commitlint/cli": "^21.0.2",
+    "@commitlint/config-conventional": "^21.0.2",
+    "@playwright/test": "^1.61.0",
+    "@tailwindcss/vite": "^4.3.1",
+    "@tauri-apps/cli": "^2.11.2",
+    "@vitejs/plugin-vue": "^6.0.7",
+    "@vue/test-utils": "^2.4.11",
     "husky": "^9.1.7",
     "jsdom": "^29.1.1",
-    "tailwindcss": "^4.3.0",
-    "typescript": "~5.6.2",
-    "vite": "^6.0.3",
-    "vitest": "^4.1.6",
-    "vue-tsc": "^2.1.10"
+    "tailwindcss": "^4.3.1",
+    "typescript": "~6.0.3",
+    "vite": "^8.0.16",
+    "vitest": "^4.1.9",
+    "vue-tsc": "^3.3.5"
   }
 }
