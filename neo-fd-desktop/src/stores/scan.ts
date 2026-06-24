@@ -1,8 +1,15 @@
 import { listen } from '@tauri-apps/api/event';
 import { defineStore } from 'pinia';
-import { ref, shallowRef } from 'vue';
+import { ref, shallowRef, triggerRef } from 'vue';
 import { type ScanResult, scannerApi } from '../api/ipc';
 import { useNotificationStore } from './notification';
+
+export interface ScanResultItem extends ScanResult {
+  id: number;
+  rowKind: 'result';
+}
+
+const RESULT_FLUSH_INTERVAL_MS = 16;
 
 // 核心掃描狀態 Store，處理掃描設定、Tauri IPC 監聽與中止機制
 export const useScanStore = defineStore('scan', () => {
@@ -12,8 +19,15 @@ export const useScanStore = defineStore('scan', () => {
   // 是否正在掃描中
   const isScanning = ref(false);
 
+  // 本次掃描開始與結束時間，用於 UI 顯示搜尋生命週期
+  const scanStartTime = ref<Date | null>(null);
+  const scanEndTime = ref<Date | null>(null);
+
   // 掃描結果列表，採用 shallowRef 提升大數據效能，避免深層 Reactivity 效能開銷
-  const results = shallowRef<ScanResult[]>([]);
+  const results = shallowRef<ScanResultItem[]>([]);
+
+  // 結果版本號用於讓大型衍生資料結構自行決定節流更新時機
+  const resultsVersion = ref(0);
 
   // 預設內建的比對規則模式
   const selectedPatterns = ref([
@@ -35,6 +49,11 @@ export const useScanStore = defineStore('scan', () => {
   // 儲存 Tauri 事件登出控制代碼，防止記憶體洩漏
   let unlistenResult: (() => void) | null = null;
   let unlistenFinished: (() => void) | null = null;
+  let nextResultId = 1;
+  let pendingResults: ScanResult[] = [];
+  let pendingFrame: number | null = null;
+  let pendingTimer: ReturnType<typeof setTimeout> | null = null;
+  const resultsByPath = new Map<string, ScanResultItem[]>();
 
   function normalizeMaxResults(value: string): number | null {
     const trimmed = value.trim();
@@ -48,6 +67,74 @@ export const useScanStore = defineStore('scan', () => {
     }
 
     return maxResults;
+  }
+
+  function indexResult(result: ScanResultItem) {
+    const existing = resultsByPath.get(result.path);
+    if (existing) {
+      existing.push(result);
+      return;
+    }
+
+    resultsByPath.set(result.path, [result]);
+  }
+
+  function flushPendingResults() {
+    if (pendingResults.length === 0) return;
+
+    const batch = pendingResults;
+    pendingResults = [];
+
+    for (const result of batch) {
+      const item: ScanResultItem = {
+        ...result,
+        id: nextResultId,
+        rowKind: 'result',
+      };
+      nextResultId += 1;
+      results.value.push(item);
+      indexResult(item);
+    }
+
+    resultsVersion.value += 1;
+    triggerRef(results);
+  }
+
+  function cancelScheduledFlush() {
+    if (pendingFrame !== null) {
+      cancelAnimationFrame(pendingFrame);
+      pendingFrame = null;
+    }
+    if (pendingTimer !== null) {
+      clearTimeout(pendingTimer);
+      pendingTimer = null;
+    }
+  }
+
+  function schedulePendingFlush() {
+    if (pendingFrame !== null || pendingTimer !== null) return;
+
+    const flush = () => {
+      pendingFrame = null;
+      pendingTimer = null;
+      flushPendingResults();
+    };
+
+    if (typeof requestAnimationFrame === 'function') {
+      pendingFrame = requestAnimationFrame(flush);
+      return;
+    }
+
+    pendingTimer = setTimeout(flush, RESULT_FLUSH_INTERVAL_MS);
+  }
+
+  function resetResults() {
+    cancelScheduledFlush();
+    pendingResults = [];
+    resultsByPath.clear();
+    results.value = [];
+    nextResultId = 1;
+    resultsVersion.value += 1;
   }
 
   // 啟動掃描程序
@@ -79,7 +166,9 @@ export const useScanStore = defineStore('scan', () => {
       return;
     }
 
-    results.value = [];
+    resetResults();
+    scanStartTime.value = new Date();
+    scanEndTime.value = null;
     isScanning.value = true;
 
     try {
@@ -99,6 +188,7 @@ export const useScanStore = defineStore('scan', () => {
     if (!isScanning.value) return;
     try {
       await scannerApi.cancelScan();
+      scanEndTime.value = new Date();
       const notification = useNotificationStore();
       notification.add('正在中止掃描...', 'warning');
     } catch (err) {
@@ -114,12 +204,18 @@ export const useScanStore = defineStore('scan', () => {
     unlistenResult = await listen<ScanResult[]>(
       'scan-result-batch',
       (event) => {
-        results.value = [...results.value, ...event.payload];
+        pendingResults.push(...event.payload);
+        schedulePendingFlush();
       },
     );
 
     // 監聽掃描完畢事件
     unlistenFinished = await listen('scan-finished', () => {
+      cancelScheduledFlush();
+      flushPendingResults();
+      if (!scanEndTime.value) {
+        scanEndTime.value = new Date();
+      }
       isScanning.value = false;
       const notification = useNotificationStore();
       notification.add('掃描已完成', 'success');
@@ -136,17 +232,36 @@ export const useScanStore = defineStore('scan', () => {
       unlistenFinished();
       unlistenFinished = null;
     }
+    cancelScheduledFlush();
+    pendingResults = [];
   }
 
   // 根據檔案路徑將掃描結果從 results 中過濾，用於檔案刪除後的即時 UI 同步
   function removeResultsByPath(path: string) {
-    results.value = results.value.filter((r) => r.path !== path);
+    flushPendingResults();
+
+    const removedResults = resultsByPath.get(path);
+    if (!removedResults) return;
+
+    const removedIds = new Set(removedResults.map((result) => result.id));
+    resultsByPath.delete(path);
+    results.value = results.value.filter(
+      (result) => !removedIds.has(result.id),
+    );
+    resultsVersion.value += 1;
+  }
+
+  function getResultsByPath(path: string): ScanResultItem[] {
+    return resultsByPath.get(path) ?? [];
   }
 
   return {
     scanPath,
     isScanning,
+    scanStartTime,
+    scanEndTime,
     results,
+    resultsVersion,
     selectedPatterns,
     customPattern,
     customName,
@@ -157,5 +272,6 @@ export const useScanStore = defineStore('scan', () => {
     init,
     cleanup,
     removeResultsByPath,
+    getResultsByPath,
   };
 });

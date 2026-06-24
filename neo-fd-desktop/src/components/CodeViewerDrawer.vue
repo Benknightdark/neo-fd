@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { storeToRefs } from 'pinia';
+import { useVirtualList } from '@vueuse/core';
 import { computed, nextTick, ref, watch } from 'vue';
 import { type ScanResult, scannerApi, systemApi } from '../api/ipc';
 import { useNotificationStore } from '../stores/notification';
@@ -14,8 +14,10 @@ const props = defineProps<{
 // 宣告關閉事件，以回報父元件進行狀態清理
 const emit = defineEmits<(e: 'close') => void>();
 
+const CODE_LINE_HEIGHT = 22;
+const CODE_VIEWER_OVERSCAN = 16;
+
 const store = useScanStore();
-const { results } = storeToRefs(store);
 const notificationStore = useNotificationStore();
 
 // 本地元件渲染狀態
@@ -26,7 +28,6 @@ const drawerMatchedText = ref('');
 const drawerActiveMatchIndex = ref(0);
 const drawerLines = ref<string[]>([]);
 const drawerError = ref('');
-const codeViewerRef = ref<HTMLElement | null>(null);
 
 // 新增：編輯模式狀態與內容緩衝
 const isEditing = ref(false);
@@ -36,9 +37,33 @@ const isSaving = ref(false);
 // 計算屬性：篩選出當前開啟檔案的所有個資洩漏點，並依據行號遞增排序
 const activeFileMatches = computed(() => {
   if (!drawerPath.value) return [];
-  return [...results.value]
-    .filter((r) => r.path === drawerPath.value)
-    .sort((a, b) => a.line_num - b.line_num);
+  return [...store.getResultsByPath(drawerPath.value)].sort(
+    (a, b) => a.line_num - b.line_num || a.id - b.id,
+  );
+});
+
+interface CodeLineRow {
+  id: number;
+  lineNumber: number;
+  text: string;
+}
+
+const codeLineRows = computed<CodeLineRow[]>(() =>
+  drawerLines.value.map((line, index) => ({
+    id: index + 1,
+    lineNumber: index + 1,
+    text: line,
+  })),
+);
+
+const {
+  list: codeLineList,
+  containerProps: codeViewerContainerProps,
+  wrapperProps: codeViewerWrapperProps,
+  scrollTo: scrollToCodeLine,
+} = useVirtualList(codeLineRows, {
+  itemHeight: CODE_LINE_HEIGHT,
+  overscan: CODE_VIEWER_OVERSCAN,
 });
 
 // 非同步加載目標檔案內容，並解析出跳轉 HUD 指標
@@ -76,10 +101,10 @@ async function loadFileContent(result: ScanResult) {
 // 平滑滾動視窗定位，將金色高亮行置於容器正中央
 function scrollToActiveLine() {
   if (isEditing.value) return; // 編輯中無須捲動
-  const targetElement = codeViewerRef.value?.querySelector('.highlight-line');
-  if (targetElement) {
-    targetElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
-  }
+  if (!drawerTargetLine.value) return;
+
+  const targetIndex = Math.max(0, drawerTargetLine.value - 1);
+  scrollToCodeLine(Math.max(0, targetIndex - CODE_VIEWER_OVERSCAN / 2));
 }
 
 // 監聽抽屜開啟狀態與目前結果：支援首次開啟、已開啟時切換結果，以及關閉後延遲清理
@@ -204,15 +229,42 @@ function startResize(e: MouseEvent) {
 // 新增：綁定編輯器 DOM 控制
 const lineNumbersRef = ref<HTMLElement | null>(null);
 const textareaRef = ref<HTMLTextAreaElement | null>(null);
+const editorScrollTop = ref(0);
+const editorViewportHeight = ref(0);
 
 // 新增：即時計算編輯狀態下的總行數
 const editedLinesCount = computed(() => {
   return editedContent.value.split(/\r?\n/).length || 1;
 });
 
+const visibleEditorLineNumbers = computed(() => {
+  const total = editedLinesCount.value;
+  const viewportHeight = editorViewportHeight.value || 400;
+  const startIndex = Math.max(
+    0,
+    Math.floor(editorScrollTop.value / CODE_LINE_HEIGHT) - CODE_VIEWER_OVERSCAN,
+  );
+  const visibleCount =
+    Math.ceil(viewportHeight / CODE_LINE_HEIGHT) + CODE_VIEWER_OVERSCAN * 2;
+  const endIndex = Math.min(total, startIndex + visibleCount);
+  const rows: number[] = [];
+
+  for (let index = startIndex; index < endIndex; index += 1) {
+    rows.push(index + 1);
+  }
+
+  return {
+    rows,
+    topOffset: startIndex * CODE_LINE_HEIGHT,
+    totalHeight: total * CODE_LINE_HEIGHT,
+  };
+});
+
 // 新增：同步滾動編輯器行號與輸入區
 function syncScroll() {
   if (textareaRef.value && lineNumbersRef.value) {
+    editorScrollTop.value = textareaRef.value.scrollTop;
+    editorViewportHeight.value = textareaRef.value.clientHeight;
     lineNumbersRef.value.scrollTop = textareaRef.value.scrollTop;
   }
 }
@@ -252,6 +304,7 @@ function focusAndSelectLeak() {
         if (lineNumbersRef.value) {
           lineNumbersRef.value.scrollTop = scrollOffset;
         }
+        syncScroll();
       }
     });
   }
@@ -264,6 +317,7 @@ function startEdit() {
 
   // 100ms 延遲以確保 DOM 已經妥善渲染，隨後自動定位反白
   setTimeout(() => {
+    syncScroll();
     focusAndSelectLeak();
   }, 100);
 }
@@ -444,15 +498,18 @@ async function confirmDelete() {
           </div>
 
           <!-- A. 唯讀狀態之語法高亮 Code Viewer -->
-          <div v-if="!isEditing" ref="codeViewerRef" class="code-viewer">
-            <div
-              v-for="(line, index) in drawerLines"
-              :key="index"
-              class="code-line"
-              :class="{ 'highlight-line': index + 1 === drawerTargetLine }"
-            >
-              <span class="line-number">{{ index + 1 }}</span>
-              <pre class="line-content"><template v-if="index + 1 === drawerTargetLine && drawerMatchedText"><span v-for="(part, pIdx) in splitMatchedLine(line, drawerMatchedText)" :key="pIdx" :class="{ 'match-segment': part.isMatch }">{{ part.text }}</span></template><template v-else>{{ line || ' ' }}</template></pre>
+          <div v-if="!isEditing" v-bind="codeViewerContainerProps" class="code-viewer">
+            <div v-bind="codeViewerWrapperProps">
+              <div
+                v-for="lineItem in codeLineList"
+                :key="lineItem.data.id"
+                class="code-line"
+                :class="{ 'highlight-line': lineItem.data.lineNumber === drawerTargetLine }"
+                :style="{ height: `${CODE_LINE_HEIGHT}px` }"
+              >
+                <span class="line-number">{{ lineItem.data.lineNumber }}</span>
+                <pre class="line-content"><template v-if="lineItem.data.lineNumber === drawerTargetLine && drawerMatchedText"><span v-for="(part, pIdx) in splitMatchedLine(lineItem.data.text, drawerMatchedText)" :key="pIdx" :class="{ 'match-segment': part.isMatch }">{{ part.text }}</span></template><template v-else>{{ lineItem.data.text || ' ' }}</template></pre>
+              </div>
             </div>
           </div>
 
@@ -461,12 +518,22 @@ async function confirmDelete() {
             <!-- 編輯器左側行號列 -->
             <div ref="lineNumbersRef" class="editor-line-numbers">
               <div
-                v-for="n in editedLinesCount"
-                :key="n"
-                class="editor-line-number"
-                :class="{ 'highlight-editor-line': n === drawerTargetLine }"
+                class="editor-line-number-spacer"
+                :style="{ height: `${visibleEditorLineNumbers.totalHeight}px` }"
               >
-                {{ n }}
+                <div
+                  class="editor-line-number-window"
+                  :style="{ transform: `translateY(${visibleEditorLineNumbers.topOffset}px)` }"
+                >
+                  <div
+                    v-for="n in visibleEditorLineNumbers.rows"
+                    :key="n"
+                    class="editor-line-number"
+                    :class="{ 'highlight-editor-line': n === drawerTargetLine }"
+                  >
+                    {{ n }}
+                  </div>
+                </div>
               </div>
             </div>
             <!-- 編輯器右側文字輸入區 -->
@@ -985,6 +1052,18 @@ async function confirmDelete() {
   line-height: 22px;
   width: 100%;
   box-sizing: border-box;
+}
+
+.editor-line-number-spacer {
+  position: relative;
+  width: 100%;
+}
+
+.editor-line-number-window {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
 }
 
 /* 編輯器高亮行號列標記 */

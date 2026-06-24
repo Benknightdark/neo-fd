@@ -5,6 +5,10 @@ mod scanner;
 use scanner::Scanner;
 use tauri::Emitter;
 
+const RESULT_CHANNEL_BUFFER: usize = 2_000;
+const RESULT_BATCH_SIZE: usize = 500;
+const RESULT_BATCH_INTERVAL: std::time::Duration = std::time::Duration::from_millis(100);
+
 #[derive(Default)]
 struct AppScanState {
     aborted: Arc<AtomicBool>,
@@ -29,7 +33,7 @@ async fn scan_directory(
     state.aborted.store(false, Ordering::Relaxed);
 
     let aborted_scanner = Arc::clone(&state.aborted);
-    let (tx, rx) = std::sync::mpsc::channel::<scanner::ScanResult>();
+    let (tx, rx) = std::sync::mpsc::sync_channel::<scanner::ScanResult>(RESULT_CHANNEL_BUFFER);
 
     let scanner = Scanner::new(
         regex_patterns,
@@ -50,20 +54,20 @@ async fn scan_directory(
             scanner.scan_dir(&scan_path);
         });
 
-        // 收集執行緒：從 rx 中讀取結果，並進行 100ms / 100筆 批次發送
+        // 收集執行緒：從 rx 中讀取結果，並進行固定間隔與數量的批次發送
         let mut batch = Vec::new();
         let mut last_emit = std::time::Instant::now();
 
         loop {
-            let timeout = std::time::Duration::from_millis(100)
+            let timeout = RESULT_BATCH_INTERVAL
                 .checked_sub(last_emit.elapsed())
                 .unwrap_or(std::time::Duration::ZERO);
 
             match rx.recv_timeout(timeout) {
                 Ok(res) => {
                     batch.push(res);
-                    if batch.len() >= 100
-                        || last_emit.elapsed() >= std::time::Duration::from_millis(100)
+                    if batch.len() >= RESULT_BATCH_SIZE
+                        || last_emit.elapsed() >= RESULT_BATCH_INTERVAL
                     {
                         let _ = app_clone.emit("scan-result-batch", &batch);
                         batch.clear();
