@@ -2,8 +2,26 @@
 import { open } from '@tauri-apps/plugin-dialog';
 import { computed } from 'vue';
 import { useScanStore } from '../stores/scan';
+import { appDisplayVersion } from '../utils/appMeta';
 
 const store = useScanStore();
+
+const scanTimeFormatter = new Intl.DateTimeFormat('zh-TW', {
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+  hour: '2-digit',
+  minute: '2-digit',
+  second: '2-digit',
+  hour12: false,
+});
+
+function formatScanTime(value: Date | null): string {
+  return value ? scanTimeFormatter.format(value) : '尚未記錄';
+}
+
+const scanStartTimeText = computed(() => formatScanTime(store.scanStartTime));
+const scanEndTimeText = computed(() => formatScanTime(store.scanEndTime));
 
 // 計算屬性守衛：確保至少選擇一個內建模式，或輸入自定義模式才可進行掃描
 const canScan = computed(() => {
@@ -42,7 +60,11 @@ async function handleSelectDir() {
 <template>
   <aside class="sidebar">
     <div class="sidebar-header">
-      <h2>掃描設定</h2>
+      <div class="app-title-row">
+        <h2>Neo FD</h2>
+        <span class="version-badge">{{ appDisplayVersion }}</span>
+      </div>
+      <p class="sidebar-subtitle">掃描設定</p>
     </div>
 
     <div class="field">
@@ -126,6 +148,20 @@ async function handleSelectDir() {
       </div>
     </div>
 
+    <div
+      v-if="store.scanStartTime || store.scanEndTime"
+      class="scan-time-panel"
+    >
+      <div v-if="store.scanStartTime" class="scan-time-row">
+        <span class="scan-time-label">開始時間</span>
+        <span class="scan-time-value">{{ scanStartTimeText }}</span>
+      </div>
+      <div v-if="store.scanEndTime" class="scan-time-row">
+        <span class="scan-time-label">結束時間</span>
+        <span class="scan-time-value">{{ scanEndTimeText }}</span>
+      </div>
+    </div>
+
     <button
       v-if="store.isScanning"
       class="scan-btn cancel-btn"
@@ -142,6 +178,10 @@ async function handleSelectDir() {
     >
       開始掃描
     </button>
+
+    <footer class="sidebar-footer">
+      {{ appDisplayVersion }}
+    </footer>
   </aside>
 </template>
 
@@ -163,6 +203,33 @@ async function handleSelectDir() {
   font-weight: 700;
   color: #2c3e50;
   letter-spacing: 0.5px;
+}
+
+.app-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.version-badge {
+  flex-shrink: 0;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: rgba(0, 123, 255, 0.08);
+  color: #007bff;
+  font-size: 0.68rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.sidebar-subtitle {
+  margin: 4px 0 0;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: #7f8c8d;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
 }
 
 .field {
@@ -280,6 +347,36 @@ input[type="number"]:disabled {
   height: 16px;
 }
 
+.scan-time-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid #dee2e6;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.scan-time-row {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.scan-time-label {
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: #7f8c8d;
+  letter-spacing: 0.4px;
+}
+
+.scan-time-value {
+  color: #2c3e50;
+  font-family: 'Fira Code', Consolas, Monaco, monospace;
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
 .checkbox-group label {
   text-transform: none;
   font-weight: 500;
@@ -326,6 +423,15 @@ input[type="number"]:disabled {
 .scan-btn.cancel-btn:hover {
   background: linear-gradient(135deg, #c82333, #bd2130);
   box-shadow: 0 6px 16px rgba(220, 53, 69, 0.35);
+}
+
+.sidebar-footer {
+  padding-top: 2px;
+  color: #95a5a6;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  text-align: center;
 }
 
 .spinner {

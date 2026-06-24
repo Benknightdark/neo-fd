@@ -1,12 +1,16 @@
 <script setup lang="ts">
 import { useVirtualList } from '@vueuse/core';
 import { storeToRefs } from 'pinia';
-import { computed, ref, watch } from 'vue';
+import { computed, onUnmounted, ref, shallowRef, watch } from 'vue';
 import type { ScanResult } from '../api/ipc';
-import { useScanStore } from '../stores/scan';
+import { type ScanResultItem, useScanStore } from '../stores/scan';
+import { buildResultTreeRows, type TreeNode } from '../utils/resultTree';
+
+const RESULT_ROW_HEIGHT = 45;
+const TREE_REBUILD_INTERVAL_MS = 250;
 
 const store = useScanStore();
-const { results } = storeToRefs(store);
+const { isScanning, results, resultsVersion } = storeToRefs(store);
 
 // 宣告開口事件：當使用者點擊結果檔案時，發送該洩漏項目給父元件以開啟抽屜
 const emit = defineEmits<(e: 'open-drawer', result: ScanResult) => void>();
@@ -22,36 +26,61 @@ watch(viewMode, (newMode) => {
   localStorage.setItem('neo-fd-view-mode', newMode);
 });
 
-// 樹狀節點介面定義
-interface TreeNode {
-  id: string;
-  name: string;
-  type: 'folder' | 'file' | 'match';
-  depth: number;
-  isOpen: boolean;
-  parentId: string | null;
-  children: string[];
-  matchCount: number;
-  scanResult?: ScanResult;
-}
-
 // 記錄被折疊的節點 ID
 const collapsedIds = ref<Set<string>>(new Set());
+const treeRows = shallowRef<TreeNode[]>([]);
+let treeRebuildTimer: ReturnType<typeof setTimeout> | null = null;
+let lastTreeRebuildAt = 0;
+
+function cancelScheduledTreeRebuild() {
+  if (treeRebuildTimer === null) return;
+  clearTimeout(treeRebuildTimer);
+  treeRebuildTimer = null;
+}
+
+function rebuildTreeRows() {
+  cancelScheduledTreeRebuild();
+  treeRows.value = buildResultTreeRows(results.value, collapsedIds.value);
+  lastTreeRebuildAt = Date.now();
+}
+
+function scheduleTreeRebuild(force = false) {
+  if (viewMode.value !== 'tree') return;
+
+  if (force || !isScanning.value) {
+    rebuildTreeRows();
+    return;
+  }
+
+  const elapsed = Date.now() - lastTreeRebuildAt;
+  if (elapsed >= TREE_REBUILD_INTERVAL_MS) {
+    rebuildTreeRows();
+    return;
+  }
+
+  if (treeRebuildTimer !== null) return;
+  treeRebuildTimer = setTimeout(
+    rebuildTreeRows,
+    TREE_REBUILD_INTERVAL_MS - elapsed,
+  );
+}
 
 // 一鍵展開全部
 function expandAll() {
   collapsedIds.value = new Set();
+  scheduleTreeRebuild(true);
 }
 
 // 一鍵折疊全部
 function collapseAll() {
   const allIds = new Set<string>();
-  flattenedNodes.value.forEach((node) => {
+  treeRows.value.forEach((node) => {
     if (node.type !== 'match') {
       allIds.add(node.id);
     }
   });
   collapsedIds.value = allIds;
+  scheduleTreeRebuild(true);
 }
 
 // 切換單一節點摺疊狀態
@@ -64,189 +93,46 @@ function toggleNode(node: TreeNode) {
     newCollapsed.add(node.id);
   }
   collapsedIds.value = newCollapsed;
+  scheduleTreeRebuild(true);
 }
 
-// 共同前綴路徑擷取 Helper 函數，避免深度過深的無意義空殼節點
-function getCommonDirectory(paths: string[]): string {
-  if (paths.length === 0) return '';
-  if (paths.length === 1) {
-    const parts = paths[0].split('/');
-    parts.pop();
-    return parts.join('/');
+watch(
+  [viewMode, resultsVersion],
+  () => {
+    scheduleTreeRebuild();
+  },
+  { immediate: true },
+);
+
+watch(isScanning, (scanning, wasScanning) => {
+  if (!scanning && wasScanning) {
+    scheduleTreeRebuild(true);
   }
-  const splitPaths = paths.map((p) => p.split('/'));
-  const common: string[] = [];
-  const firstPathParts = splitPaths[0];
-
-  for (let i = 0; i < firstPathParts.length - 1; i++) {
-    const part = firstPathParts[i];
-    const isCommon = splitPaths.every((parts) => parts[i] === part);
-    if (isCommon) {
-      common.push(part);
-    } else {
-      break;
-    }
-  }
-  return common.join('/');
-}
-
-// 建構完整的反應式多級樹狀結構，並根據 collapsedIds 計算扁平化數組
-const flattenedNodes = computed<TreeNode[]>(() => {
-  if (results.value.length === 0) return [];
-
-  const paths = results.value.map((r) => r.path.replace(/\\/g, '/'));
-  const commonPrefix = getCommonDirectory(paths);
-
-  const nodesMap = new Map<string, TreeNode>();
-  const root: TreeNode = {
-    id: 'root',
-    name: 'Root',
-    type: 'folder',
-    depth: -1,
-    isOpen: true,
-    parentId: null,
-    children: [],
-    matchCount: 0,
-  };
-  nodesMap.set('root', root);
-
-  results.value.forEach((res, index) => {
-    const normalizedPath = res.path.replace(/\\/g, '/');
-    let relativePath = normalizedPath;
-    if (commonPrefix && normalizedPath.startsWith(commonPrefix)) {
-      relativePath = normalizedPath.slice(commonPrefix.length);
-      if (relativePath.startsWith('/')) {
-        relativePath = relativePath.slice(1);
-      }
-    }
-
-    const pathParts = relativePath.split('/');
-    let currentParentId = 'root';
-    let accumulatedPath = commonPrefix;
-
-    pathParts.forEach((part, partIndex) => {
-      const isLast = partIndex === pathParts.length - 1;
-      accumulatedPath = accumulatedPath ? `${accumulatedPath}/${part}` : part;
-      const nodeId = accumulatedPath;
-      const depth = partIndex;
-
-      if (!nodesMap.has(nodeId)) {
-        const parentNode = nodesMap.get(currentParentId);
-        if (parentNode) {
-          parentNode.children.push(nodeId);
-        }
-
-        const nodeType = isLast ? 'file' : 'folder';
-        const isOpen = !collapsedIds.value.has(nodeId);
-
-        const newNode: TreeNode = {
-          id: nodeId,
-          name: part,
-          type: nodeType,
-          depth: depth,
-          isOpen: isOpen,
-          parentId: currentParentId,
-          children: [],
-          matchCount: 0,
-        };
-        nodesMap.set(nodeId, newNode);
-      }
-
-      const node = nodesMap.get(nodeId);
-      if (node) {
-        node.matchCount += 1;
-      }
-      currentParentId = nodeId;
-    });
-
-    // 建立匹配行節點
-    const fileNode = nodesMap.get(currentParentId);
-    if (fileNode) {
-      const matchNodeId = `${res.path}:${res.line_num}:${res.pattern_name}:${index}`;
-      const isOpen = !collapsedIds.value.has(matchNodeId);
-
-      const matchNode: TreeNode = {
-        id: matchNodeId,
-        name: `行 ${res.line_num}: [${res.pattern_name}] ${res.matched_text}`,
-        type: 'match',
-        depth: fileNode.depth + 1,
-        isOpen: isOpen,
-        parentId: currentParentId,
-        children: [],
-        matchCount: 1,
-        scanResult: res,
-      };
-
-      nodesMap.set(matchNodeId, matchNode);
-      fileNode.children.push(matchNodeId);
-    }
-
-    const rootNode = nodesMap.get('root');
-    if (rootNode) {
-      rootNode.matchCount += 1;
-    }
-  });
-
-  // 深度優先 (DFS) 遍歷以打平樹狀結構
-  const flattened: TreeNode[] = [];
-  function traverse(nodeId: string) {
-    const node = nodesMap.get(nodeId);
-    if (!node) return;
-
-    if (nodeId !== 'root') {
-      flattened.push(node);
-    }
-
-    if (node.isOpen) {
-      const childNodes = node.children
-        .map((id) => nodesMap.get(id))
-        .filter((n): n is TreeNode => !!n);
-
-      // 精緻排序：資料夾排在檔案前面，接著是檔案，按名稱排序
-      childNodes.sort((a, b) => {
-        if (a.type !== b.type) {
-          if (a.type === 'folder') return -1;
-          if (b.type === 'folder') return 1;
-          if (a.type === 'file') return -1;
-          if (b.type === 'file') return 1;
-        }
-        return a.name.localeCompare(b.name);
-      });
-
-      for (const child of childNodes) {
-        traverse(child.id);
-      }
-    }
-  }
-
-  traverse('root');
-  return flattened;
 });
 
 // 統合成單一虛擬滾動列表資料來源，依檢視模式切換
-type DisplayItem =
-  | { type: 'list-item'; data: ScanResult; index: number }
-  | { type: 'tree-item'; data: TreeNode; index: number };
+type DisplayRow = ScanResultItem | TreeNode;
 
-const displayList = computed<DisplayItem[]>(() => {
+const displayRows = computed<DisplayRow[]>(() => {
   if (viewMode.value === 'list') {
-    return results.value.map((r, i) => ({
-      type: 'list-item' as const,
-      data: r,
-      index: i,
-    }));
+    return results.value;
   }
-  return flattenedNodes.value.map((n, i) => ({
-    type: 'tree-item' as const,
-    data: n,
-    index: i,
-  }));
+  return treeRows.value;
 });
 
 // 註冊高性能虛擬滾動列表
-const { list, containerProps, wrapperProps } = useVirtualList(displayList, {
-  itemHeight: 45,
+const { list, containerProps, wrapperProps } = useVirtualList(displayRows, {
+  itemHeight: RESULT_ROW_HEIGHT,
+  overscan: 12,
 });
+
+function isResultRow(row: DisplayRow): row is ScanResultItem {
+  return row.rowKind === 'result';
+}
+
+function displayRowKey(row: DisplayRow): string {
+  return row.rowKind === 'result' ? `result:${row.id}` : `tree:${row.id}`;
+}
 
 // 樹狀節點點擊邏輯
 function handleNodeClick(node: TreeNode) {
@@ -258,6 +144,10 @@ function handleNodeClick(node: TreeNode) {
     toggleNode(node);
   }
 }
+
+onUnmounted(() => {
+  cancelScheduledTreeRebuild();
+});
 </script>
 
 <template>
@@ -317,42 +207,42 @@ function handleNodeClick(node: TreeNode) {
       <div v-bind="wrapperProps">
         <div
           v-for="item in list"
-          :key="item.index"
+          :key="displayRowKey(item.data)"
           class="table-row"
           :class="[
-            item.data.type === 'list-item' ? 'list-row' : 'tree-row',
-            item.data.type === 'tree-item' ? `node-${item.data.data.type}` : ''
+            isResultRow(item.data) ? 'list-row' : 'tree-row',
+            !isResultRow(item.data) ? `node-${item.data.type}` : ''
           ]"
-          :style="{ height: '45px' }"
+          :style="{ height: `${RESULT_ROW_HEIGHT}px` }"
         >
           <!-- A. 列表檢視渲染 -->
-          <template v-if="item.data.type === 'list-item'">
+          <template v-if="isResultRow(item.data)">
             <div class="col type">
-              <span class="badge">{{ item.data.data.pattern_name }}</span>
+              <span class="badge">{{ item.data.pattern_name }}</span>
             </div>
             <div
               class="col path"
-              :title="item.data.data.path"
-              @click="emit('open-drawer', item.data.data)"
+              :title="item.data.path"
+              @click="emit('open-drawer', item.data)"
             >
-              {{ item.data.data.path }}
+              {{ item.data.path }}
             </div>
-            <div class="col line">{{ item.data.data.line_num }}</div>
-            <div class="col matched">{{ item.data.data.matched_text }}</div>
+            <div class="col line">{{ item.data.line_num }}</div>
+            <div class="col matched">{{ item.data.matched_text }}</div>
           </template>
 
           <!-- B. 樹狀檢視渲染 (Multi-stage Folder/File/Match nodes) -->
           <template v-else>
             <div
               class="tree-node-content"
-              :style="{ paddingLeft: `${item.data.data.depth * 20 + 20}px` }"
-              @click="handleNodeClick(item.data.data)"
+              :style="{ paddingLeft: `${item.data.depth * 20 + 20}px` }"
+              @click="handleNodeClick(item.data)"
             >
               <!-- 展開/收合狀態旋轉箭頭 -->
               <span
-                v-if="item.data.data.type !== 'match'"
+                v-if="item.data.type !== 'match'"
                 class="chevron-icon"
-                :class="{ 'is-open': item.data.data.isOpen }"
+                :class="{ 'is-open': item.data.isOpen }"
               >
                 ▼
               </span>
@@ -360,10 +250,10 @@ function handleNodeClick(node: TreeNode) {
 
               <!-- 語意化圖示 -->
               <span class="node-icon">
-                <template v-if="item.data.data.type === 'folder'">
-                  {{ item.data.data.isOpen ? '📂' : '📁' }}
+                <template v-if="item.data.type === 'folder'">
+                  {{ item.data.isOpen ? '📂' : '📁' }}
                 </template>
-                <template v-else-if="item.data.data.type === 'file'">
+                <template v-else-if="item.data.type === 'file'">
                   📄
                 </template>
                 <template v-else>
@@ -372,19 +262,19 @@ function handleNodeClick(node: TreeNode) {
               </span>
 
               <!-- 內容顯示 -->
-              <span class="node-name" :class="{ 'is-match-text': item.data.data.type === 'match' }">
+              <span class="node-name" :class="{ 'is-match-text': item.data.type === 'match' }">
                 <!-- 資料夾或檔案 -->
-                <template v-if="item.data.data.type !== 'match'">
-                  <span class="name-text" :title="item.data.data.name">{{ item.data.data.name }}</span>
-                  <span class="match-count-tag">{{ item.data.data.matchCount }} 筆匹配</span>
+                <template v-if="item.data.type !== 'match'">
+                  <span class="name-text" :title="item.data.name">{{ item.data.name }}</span>
+                  <span class="match-count-tag">{{ item.data.matchCount }} 筆匹配</span>
                 </template>
 
                 <!-- 敏感字元匹配行 -->
                 <template v-else>
-                  <span class="line-badge">行 {{ item.data.data.scanResult?.line_num }}</span>
-                  <span class="pattern-badge">{{ item.data.data.scanResult?.pattern_name }}</span>
-                  <span class="matched-snippet" :title="item.data.data.scanResult?.matched_text">
-                    {{ item.data.data.scanResult?.matched_text }}
+                  <span class="line-badge">行 {{ item.data.scanResult?.line_num }}</span>
+                  <span class="pattern-badge">{{ item.data.scanResult?.pattern_name }}</span>
+                  <span class="matched-snippet" :title="item.data.scanResult?.matched_text">
+                    {{ item.data.scanResult?.matched_text }}
                   </span>
                 </template>
               </span>
@@ -746,4 +636,3 @@ function handleNodeClick(node: TreeNode) {
   margin: 0;
 }
 </style>
-
