@@ -10,13 +10,8 @@
     "tauri": "tauri",
     "lint": "biome check src/",
     "format": "biome format --write src/",
-    "test": "vitest run",
-    "test:e2e": "playwright test",
     "prepare": "cd .. && husky neo-fd-desktop/.husky",
-    "lint:rust": "cd src-tauri && cargo fmt --check && cargo clippy -- -D warnings",
-    "lint:all": "npm run lint && npm run lint:rust",
-    "test:rust": "cd src-tauri && cargo test",
-    "test:all": "npm run test && npm run test:rust"
+    "lint:rust": "cd src-tauri && cargo fmt --check && cargo clippy -- -D warnings"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.11.0",
@@ -30,17 +25,13 @@
     "@biomejs/biome": "^2.5.0",
     "@commitlint/cli": "^21.0.2",
     "@commitlint/config-conventional": "^21.0.2",
-    "@playwright/test": "^1.61.0",
     "@tailwindcss/vite": "^4.3.1",
     "@tauri-apps/cli": "^2.11.2",
     "@vitejs/plugin-vue": "^6.0.7",
-    "@vue/test-utils": "^2.4.11",
     "husky": "^9.1.7",
-    "jsdom": "^29.1.1",
     "tailwindcss": "^4.3.1",
     "typescript": "~6.0.3",
     "vite": "^8.0.16",
-    "vitest": "^4.1.9",
     "vue-tsc": "^3.3.5"
   }
 }

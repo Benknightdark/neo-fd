@@ -1,33 +1,14 @@
+import { useScanStore } from '@app/stores/scan';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { createPinia, setActivePinia } from 'pinia';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { useScanStore } from './scan';
-
-const eventListeners = vi.hoisted(
-  () => new Map<string, (event: { payload: unknown }) => void>(),
-);
-
-vi.mock('@tauri-apps/api/core', () => ({
-  invoke: vi.fn(),
-}));
-
-vi.mock('@tauri-apps/api/event', () => ({
-  listen: vi.fn(
-    (eventName: string, handler: (event: { payload: unknown }) => void) => {
-      eventListeners.set(eventName, handler);
-      return Promise.resolve(() => {
-        eventListeners.delete(eventName);
-      });
-    },
-  ),
-}));
+import { eventListeners } from './setup';
 
 describe('useScanStore', () => {
   beforeEach(() => {
     setActivePinia(createPinia());
     eventListeners.clear();
-    vi.mocked(invoke).mockClear();
     vi.mocked(invoke).mockResolvedValue(undefined);
     vi.mocked(listen).mockClear();
   });
@@ -44,6 +25,7 @@ describe('useScanStore', () => {
 
     expect(store.normalizeMaxResults('1')).toBe(1);
     expect(store.normalizeMaxResults(' 25 ')).toBe(25);
+    expect(store.normalizeMaxResults(10)).toBe(10);
   });
 
   it('拒絕非正整數最大匹配筆數', () => {

@@ -16,6 +16,7 @@ const emit = defineEmits<(e: 'close') => void>();
 
 const CODE_LINE_HEIGHT = 22;
 const CODE_VIEWER_OVERSCAN = 16;
+const DRAWER_WIDTH_RATIO = 2 / 3;
 
 const store = useScanStore();
 const notificationStore = useNotificationStore();
@@ -111,6 +112,10 @@ function scrollToActiveLine() {
 watch(
   () => [props.isOpen, props.activeResult] as const,
   async ([isOpen, result], [wasOpen, previousResult]) => {
+    if (isOpen && !wasOpen) {
+      drawerWidth.value = getDefaultDrawerWidth();
+    }
+
     if (isOpen && result && (!wasOpen || result !== previousResult)) {
       await loadFileContent(result);
       return;
@@ -190,8 +195,13 @@ function getFileName(fullPath: string): string {
   return parts[parts.length - 1] || fullPath;
 }
 
+// 依目前視窗寬度計算抽屜的預設寬度
+function getDefaultDrawerWidth(): number {
+  return window.innerWidth * DRAWER_WIDTH_RATIO;
+}
+
 // 拖拉抽屜寬度狀態
-const drawerWidth = ref(800); // 預設寬度 800px
+const drawerWidth = ref(getDefaultDrawerWidth());
 const isResizing = ref(false);
 
 function startResize(e: MouseEvent) {
@@ -205,7 +215,7 @@ function startResize(e: MouseEvent) {
 
   function doResize(moveEvent: MouseEvent) {
     if (!isResizing.value) return;
-    const deltaX = startX - moveEvent.clientX; // 面板在右邊，滑鼠往左移動（clientX 變小）時 deltaX 為正，寬度應增加
+    const deltaX = moveEvent.clientX - startX; // 面板在左邊，滑鼠往右移動（clientX 變大）時 deltaX 為正，寬度應增加
     const newWidth = startWidth + deltaX;
 
     // 寬度界限約束
@@ -591,16 +601,16 @@ async function confirmDelete() {
 .drawer-panel {
   position: absolute;
   top: 0;
-  right: 0;
+  left: 0;
   /* width 由 inline style 動態控制 */
   max-width: 90vw;
   height: 100%;
   background: rgba(255, 255, 255, 0.96);
-  box-shadow: -10px 0 30px rgba(0, 0, 0, 0.12);
-  border-left: 1px solid rgba(0, 0, 0, 0.08);
+  box-shadow: 10px 0 30px rgba(0, 0, 0, 0.12);
+  border-right: 1px solid rgba(0, 0, 0, 0.08);
   display: flex;
   flex-direction: column;
-  transform: translateX(100%);
+  transform: translateX(-100%);
   transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1), width 0.1s ease-out; /* 寬度微調時帶點平滑感，但為防拖曳延遲，時間設極短 */
 }
 
@@ -613,7 +623,7 @@ async function confirmDelete() {
 .drawer-resizer {
   position: absolute;
   top: 0;
-  left: 0;
+  right: 0;
   width: 6px;
   height: 100%;
   cursor: ew-resize;

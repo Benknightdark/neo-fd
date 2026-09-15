@@ -1,6 +1,6 @@
+import type { ScanResultItem } from '@app/stores/scan';
+import { buildResultTreeRows } from '@app/utils/resultTree';
 import { describe, expect, it } from 'vitest';
-import type { ScanResultItem } from '../stores/scan';
-import { buildResultTreeRows } from './resultTree';
 
 function result(overrides: Partial<ScanResultItem>): ScanResultItem {
   return {

@@ -14,6 +14,8 @@
 - `neo-fd-desktop/src-tauri/capabilities/default.json` 的外部開啟權限包含 `$HOME/**`、`$HOME/*` 與 `/**` 路徑範圍。
 - `neo-fd-desktop/src-tauri/tauri.conf.json` 的內容安全政策欄位目前為 `null`。
 - `neo-fd-desktop/src-tauri/src/scanner.rs` 對單一檔案錯誤採略過策略，不會因單一檔案失敗中斷整體掃描。
+- `tests/backend/e2e/filesystem.rs` 使用系統暫存目錄驗證檔案服務，不使用專案或使用者資料；測試資料由測試生命週期清理。
+- `tests/frontend/e2e/` 的 IPC 模擬只在瀏覽器測試頁面初始化時建立，不會修改產品執行期原始碼。
 - 目前檢視的前端與原生程式碼未發現網路 API 呼叫；此結論不代表尚未檢視的工作流或外部執行環境不存在網路行為。
 
 ## 未確認事項

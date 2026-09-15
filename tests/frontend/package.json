@@ -1,0 +1,32 @@
+{
+  "name": "neo-fd-frontend-tests",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "lint": "biome check .",
+    "typecheck": "tsc --noEmit",
+    "test:unit": "vitest run --reporter=dot",
+    "test:e2e": "playwright test",
+    "test": "npm run lint && npm run typecheck && npm run test:unit && npm run test:e2e"
+  },
+  "dependencies": {
+    "@tauri-apps/api": "^2.11.0",
+    "@tauri-apps/plugin-dialog": "^2.7.1",
+    "@tauri-apps/plugin-opener": "^2.5.4",
+    "@vueuse/core": "^14.3.0",
+    "pinia": "^3.0.4",
+    "vue": "^3.5.38"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.5.0",
+    "@playwright/test": "^1.61.0",
+    "@types/node": "^22.0.0",
+    "@vitejs/plugin-vue": "^6.0.7",
+    "@vue/test-utils": "^2.4.11",
+    "jsdom": "^29.1.1",
+    "typescript": "~6.0.3",
+    "vite": "^8.0.16",
+    "vitest": "^4.1.9"
+  }
+}

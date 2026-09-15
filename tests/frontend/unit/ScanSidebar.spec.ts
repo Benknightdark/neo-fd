@@ -1,13 +1,9 @@
+import ScanSidebar from '@app/components/ScanSidebar.vue';
+import { useScanStore } from '@app/stores/scan';
+import { appDisplayVersion } from '@app/utils/appMeta';
 import { mount } from '@vue/test-utils';
 import { createPinia, setActivePinia } from 'pinia';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { useScanStore } from '../stores/scan';
-import { appDisplayVersion } from '../utils/appMeta';
-import ScanSidebar from './ScanSidebar.vue';
-
-vi.mock('@tauri-apps/plugin-dialog', () => ({
-  open: vi.fn(),
-}));
+import { beforeEach, describe, expect, it } from 'vitest';
 
 describe('ScanSidebar', () => {
   beforeEach(() => {
@@ -21,8 +17,9 @@ describe('ScanSidebar', () => {
       },
     });
 
-    const text = wrapper.text();
-    expect(text.match(new RegExp(appDisplayVersion, 'g'))).toHaveLength(2);
+    expect(
+      wrapper.text().match(new RegExp(appDisplayVersion, 'g')),
+    ).toHaveLength(2);
   });
 
   it('顯示搜尋開始與結束時間', () => {

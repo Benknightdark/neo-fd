@@ -1,8 +1,8 @@
-use regex::Regex;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
-mod scanner;
-use scanner::Scanner;
+pub mod backend;
+mod file_ops;
+pub mod scanner;
 use tauri::Emitter;
 
 const RESULT_CHANNEL_BUFFER: usize = 2_000;
@@ -22,27 +22,13 @@ async fn scan_directory(
     patterns: Vec<(String, String, bool)>,
     max_results: Option<usize>,
 ) -> Result<(), String> {
-    let mut regex_patterns = Vec::new();
-    for (name, p, requires_boundary) in patterns {
-        let re = Regex::new(&p).map_err(|e| e.to_string())?;
-        let name_arc: Arc<str> = Arc::from(name.as_str());
-        regex_patterns.push((name_arc, re, requires_boundary));
-    }
+    let compiled_patterns = backend::compile_patterns(patterns)?;
 
     // 重設中止狀態
     state.aborted.store(false, Ordering::Relaxed);
 
     let aborted_scanner = Arc::clone(&state.aborted);
-    let (tx, rx) = std::sync::mpsc::sync_channel::<scanner::ScanResult>(RESULT_CHANNEL_BUFFER);
-
-    let scanner = Scanner::new(
-        regex_patterns,
-        move |res| {
-            let _ = tx.send(res);
-        },
-        aborted_scanner,
-        max_results,
-    );
+    let (tx, rx) = std::sync::mpsc::sync_channel::<backend::ScanResult>(RESULT_CHANNEL_BUFFER);
 
     let scan_path = std::path::PathBuf::from(path);
     let app_clone = app.clone();
@@ -51,6 +37,14 @@ async fn scan_directory(
     std::thread::spawn(move || {
         // 啟動掃描執行緒
         let scan_handle = std::thread::spawn(move || {
+            let scanner = backend::Scanner::new(
+                compiled_patterns,
+                move |result| {
+                    let _ = tx.send(result);
+                },
+                aborted_scanner,
+                max_results,
+            );
             scanner.scan_dir(&scan_path);
         });
 
@@ -110,52 +104,17 @@ async fn cancel_scan(state: tauri::State<'_, AppScanState>) -> Result<(), String
 
 #[tauri::command]
 async fn read_file_content(path: String) -> Result<String, String> {
-    let file_path = std::path::Path::new(&path);
-    if !file_path.is_file() {
-        return Err("所選路徑不是有效的檔案。".to_string());
-    }
-
-    // 防禦性檢查：限制最大讀取檔案大小為 5MB 避免記憶體崩潰與效能瓶頸
-    let metadata = std::fs::metadata(file_path).map_err(|e| e.to_string())?;
-    if metadata.len() > 5 * 1024 * 1024 {
-        return Err("檔案過大（超過 5MB），基於效能安全考量不予載入。".to_string());
-    }
-
-    // 讀取檔案內容，優雅處理 I/O 錯誤與非 UTF-8 格式
-    let content =
-        std::fs::read_to_string(file_path).map_err(|e| format!("無法讀取檔案內容: {}", e))?;
-
-    Ok(content)
+    backend::read_file_content(std::path::Path::new(&path))
 }
 
 #[tauri::command]
 async fn write_file_content(path: String, content: String) -> Result<(), String> {
-    let file_path = std::path::Path::new(&path);
-    if !file_path.exists() {
-        return Err("所選路徑的檔案不存在。".to_string());
-    }
-    if !file_path.is_file() {
-        return Err("所選路徑不是有效的檔案。".to_string());
-    }
-
-    std::fs::write(file_path, content).map_err(|e| format!("無法寫入檔案內容: {}", e))?;
-
-    Ok(())
+    backend::write_file_content(std::path::Path::new(&path), &content)
 }
 
 #[tauri::command]
 async fn delete_file(path: String) -> Result<(), String> {
-    let file_path = std::path::Path::new(&path);
-    if !file_path.exists() {
-        return Err("檔案不存在或已被刪除。".to_string());
-    }
-    if !file_path.is_file() {
-        return Err("所選路徑不是有效的檔案。".to_string());
-    }
-
-    std::fs::remove_file(file_path).map_err(|e| format!("無法刪除檔案: {}", e))?;
-
-    Ok(())
+    backend::delete_file(std::path::Path::new(&path))
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]

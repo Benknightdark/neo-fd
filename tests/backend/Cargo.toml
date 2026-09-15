@@ -1,0 +1,19 @@
+[package]
+name = "neo-fd-backend-tests"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+anyhow = "1"
+neo_fd_desktop = { package = "neo-fd-desktop", path = "../../neo-fd-desktop/src-tauri" }
+regex = "1"
+tempfile = "3"
+
+[[test]]
+name = "unit"
+path = "unit/scanner.rs"
+
+[[test]]
+name = "e2e"
+path = "e2e/filesystem.rs"

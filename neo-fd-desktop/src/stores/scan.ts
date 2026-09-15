@@ -68,8 +68,8 @@ export const useScanStore = defineStore('scan', () => {
   let pendingTimer: ReturnType<typeof setTimeout> | null = null;
   const resultsByPath = new Map<string, ScanResultItem[]>();
 
-  function normalizeMaxResults(value: string): number | null {
-    const trimmed = value.trim();
+  function normalizeMaxResults(value: string | number): number | null {
+    const trimmed = String(value).trim();
     if (!trimmed) {
       return null;
     }
