@@ -5,7 +5,7 @@ use std::fs::File;
 use std::io::{BufRead, BufReader, Read};
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 
 // 限制單行最大讀取為 64KB (65,536 位元組) 以防無換行符的大型檔案導致 OOM
 const MAX_LINE_BYTES: usize = 65536;
@@ -22,7 +22,7 @@ pub struct Scanner<F>
 where
     F: Fn(ScanResult) + Send + Sync + 'static,
 {
-    patterns: Vec<(Arc<str>, Regex)>,
+    patterns: Vec<(Arc<str>, Regex, bool)>,
     on_match: Arc<F>,
     aborted: Arc<AtomicBool>,
     match_count: Arc<AtomicUsize>,
@@ -34,7 +34,7 @@ where
     F: Fn(ScanResult) + Send + Sync + 'static,
 {
     pub fn new(
-        patterns: Vec<(Arc<str>, Regex)>,
+        patterns: Vec<(Arc<str>, Regex, bool)>,
         on_match: F,
         aborted: Arc<AtomicBool>,
         max_results: Option<usize>,
@@ -108,9 +108,35 @@ fn is_binary_file(path: &Path) -> bool {
     }
 }
 
+/// 判斷字元是否為可接受的左右邊界：Unicode 空白或 Unicode 標點
+fn is_boundary_char(character: char) -> bool {
+    static BOUNDARY_CHAR_RE: OnceLock<Regex> = OnceLock::new();
+    let mut encoded = [0u8; 4];
+
+    BOUNDARY_CHAR_RE
+        .get_or_init(|| Regex::new(r"[\s\p{P}]").expect("固定 Unicode 邊界 Regex 必須有效"))
+        .is_match(character.encode_utf8(&mut encoded))
+}
+
+/// 驗證匹配內容左右兩側均為有效邊界；行首與行尾視為有效邊界
+fn has_valid_boundaries(line: &str, start: usize, end: usize) -> bool {
+    let before_is_valid = line[..start]
+        .chars()
+        .next_back()
+        .map(is_boundary_char)
+        .unwrap_or(true);
+    let after_is_valid = line[end..]
+        .chars()
+        .next()
+        .map(is_boundary_char)
+        .unwrap_or(true);
+
+    before_is_valid && after_is_valid
+}
+
 fn scan_file<F>(
     path: &Path,
-    patterns: &[(Arc<str>, Regex)],
+    patterns: &[(Arc<str>, Regex, bool)],
     on_match: &F,
     aborted: &AtomicBool,
     match_count: &AtomicUsize,
@@ -160,11 +186,17 @@ where
                 // 使用 lossy 方式處理非 UTF-8 內容，避免因編碼錯誤中斷掃描
                 let line_str = String::from_utf8_lossy(&buf);
 
-                for (name, re) in patterns {
+                for (name, re, requires_boundary) in patterns {
                     if aborted.load(Ordering::Relaxed) {
                         break;
                     }
                     for mat in re.find_iter(&line_str) {
+                        if *requires_boundary
+                            && !has_valid_boundaries(&line_str, mat.start(), mat.end())
+                        {
+                            continue;
+                        }
+
                         if let Some(max_results) = max_results {
                             // 若使用者設定最大匹配筆數，達到限制後自動觸發中止
                             let count = match_count.fetch_add(1, Ordering::Relaxed);
@@ -212,7 +244,15 @@ mod tests {
     }
 
     fn scan_temp_file(path: &Path, max_results: Option<usize>) -> Result<Vec<ScanResult>> {
-        let patterns = vec![(Arc::<str>::from("測試"), Regex::new("secret")?)];
+        let patterns = vec![(Arc::<str>::from("測試"), Regex::new("secret")?, false)];
+        scan_temp_file_with_patterns(path, &patterns, max_results)
+    }
+
+    fn scan_temp_file_with_patterns(
+        path: &Path,
+        patterns: &[(Arc<str>, Regex, bool)],
+        max_results: Option<usize>,
+    ) -> Result<Vec<ScanResult>> {
         let aborted = AtomicBool::new(false);
         let match_count = AtomicUsize::new(0);
         let results = Arc::new(Mutex::new(Vec::new()));
@@ -220,7 +260,7 @@ mod tests {
 
         scan_file(
             path,
-            &patterns,
+            patterns,
             &move |result| {
                 if let Ok(mut results) = captured_results.lock() {
                     results.push(result);
@@ -261,6 +301,85 @@ mod tests {
         let _ = fs::remove_file(&path);
 
         assert_eq!(results.len(), 2);
+
+        Ok(())
+    }
+
+    #[test]
+    fn scan_file_with_boundary_requirement_returns_only_standalone_matches() -> Result<()> {
+        let path = temp_file_path("boundaries.txt");
+        fs::write(
+            &path,
+            "欄位：A123456789。 姓名「陳小明」\n\
+A123456789,B223456789\n\
+XA123456789Y 客王小明戶\n\
+前 A123456789後 前陳小明後\n\
+標記$A123456789$\n\
+\u{3000}A123456789\t王小明\u{3000}\n\
+A123456789",
+        )?;
+
+        let patterns = vec![
+            (
+                Arc::<str>::from("身分證字號"),
+                Regex::new(r"[A-Za-z][12]\d{8}")?,
+                true,
+            ),
+            (
+                Arc::<str>::from("台灣十大姓氏"),
+                Regex::new(r"[陳林黃張李王吳劉蔡楊][\u{4e00}-\u{9fa5}]{2}")?,
+                true,
+            ),
+        ];
+
+        let results = scan_temp_file_with_patterns(&path, &patterns, None)?;
+        let _ = fs::remove_file(&path);
+
+        assert_eq!(results.len(), 7);
+        assert_eq!(
+            results
+                .iter()
+                .map(|result| result.matched_text.as_str())
+                .collect::<Vec<_>>(),
+            vec![
+                "A123456789",
+                "陳小明",
+                "A123456789",
+                "B223456789",
+                "A123456789",
+                "王小明",
+                "A123456789",
+            ]
+        );
+        assert_eq!(
+            results
+                .iter()
+                .map(|result| result.pattern_name.as_ref())
+                .collect::<Vec<_>>(),
+            vec![
+                "身分證字號",
+                "台灣十大姓氏",
+                "身分證字號",
+                "身分證字號",
+                "身分證字號",
+                "台灣十大姓氏",
+                "身分證字號",
+            ]
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn scan_file_without_boundary_requirement_preserves_embedded_matches() -> Result<()> {
+        let path = temp_file_path("custom-pattern.txt");
+        fs::write(&path, "prefixsecretvalue")?;
+
+        let results = scan_temp_file(&path, None)?;
+        let _ = fs::remove_file(&path);
+
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].matched_text, "secret");
 
         Ok(())
     }

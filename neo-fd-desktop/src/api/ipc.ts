@@ -2,6 +2,13 @@ import { invoke as tauriInvoke } from '@tauri-apps/api/core';
 import { openPath } from '@tauri-apps/plugin-opener';
 import { useNotificationStore } from '../stores/notification';
 
+// 掃描規則 tuple：名稱、Regex、是否檢查左右邊界
+export type ScanPattern = [
+  name: string,
+  pattern: string,
+  requiresBoundary: boolean,
+];
+
 /**
  * 定義與 Rust 後端綁定的強型別 Tauri 指令契約
  */
@@ -10,7 +17,7 @@ export interface TauriCommands {
   scan_directory: {
     args: {
       path: string;
-      patterns: [string, string][];
+      patterns: ScanPattern[];
       maxResults: number | null;
     };
     // biome-ignore lint/suspicious/noConfusingVoidType: void represents command without return value
@@ -119,7 +126,7 @@ export const scannerApi = {
   // 開始目錄掃描
   startScan: (
     path: string,
-    patterns: [string, string][],
+    patterns: ScanPattern[],
     maxResults: number | null,
   ) => safeInvoke('scan_directory', { path, patterns, maxResults }),
   // 中止目錄掃描

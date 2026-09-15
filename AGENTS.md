@@ -1,98 +1,49 @@
-# Neo FD 專案開發指引
+# Neo FD 專案規範
 
-本文件供 Neo FD 的開發者與程式助理使用，包含 CLI、IDE 外掛、本機工具與雲端代理。內容不綁定特定工具；以專案檔案與使用者最新需求為準。
+Neo FD 是桌面檔案掃描工具，用來搜尋資料夾中的敏感內容；檔案走訪與內容比對位於 `neo-fd-desktop/src-tauri/src/scanner.rs`。
 
-## 1. 協作原則
+## 開始工作
 
-- 所有的回答和commit msg都必須是正體中文
+1. 閱讀 `.neo_harness/ARCHITECTURE.md` 與任務相關文件。
+2. 閱讀目前實作、設定與測試，建立變更前基準。
+3. 跨模組、遷移、權限、CI 或可能跨工作階段的任務，依 `.neo_harness/PLANS.md` 建立執行計畫。
+4. 以最小範圍修改，完成後執行相關快速檢查與完整驗證。
 
+## 專案知識
 
-## 2. 開始工作前
+| 主題 | 來源 |
+| :--- | :--- |
+| 架構與依賴邊界 | `.neo_harness/ARCHITECTURE.md` |
+| 執行計畫 | `.neo_harness/PLANS.md` 與 `.neo_harness/docs/exec-plans/` |
+| 專案命令 | `.neo_harness/docs/scripts.md` |
+| 執行環境 | `.neo_harness/docs/runtime.md` |
+| CI 與發布 | `.neo_harness/docs/ci.md` |
+| 可靠性 | `.neo_harness/docs/reliability.md` |
+| 安全邊界 | `.neo_harness/docs/security.md` |
+| 品質規則 | `.neo_harness/docs/quality.md` |
 
-建議先完成以下檢查：
+## 驗證
 
-```bash
-git status --short --branch
-```
+完整命令清單：`.neo_harness/docs/scripts.md`
 
-依任務閱讀相關文件：
+統一驗證命令：`sh .neo_harness/verify.sh`
 
-- `README.md`
-- `AGENTS.md`
-- `neo-fd-desktop/package.json`
-- `neo-fd-desktop/src-tauri/Cargo.toml`
+前端或 Rust 子系統可分別執行：
 
-如果任務會改動架構、掃描規則、CI/CD 或發布流程，先提出簡短計畫並取得確認。不綁定特定指令、CLI 或計畫檔格式。
+- `sh .neo_harness/verify.sh frontend`
+- `sh .neo_harness/verify.sh rust`
 
-## 3. 專案結構
+## 工作規則
 
-```text
-neo-fd/
-├── AGENTS.md
-├── README.md
-└── neo-fd-desktop/
-    ├── package.json
-    ├── src/                 # Vue 3 前端
-    └── src-tauri/           # Tauri 2 / Rust 後端
-        ├── Cargo.toml
-        └── src/
-            ├── lib.rs       # Tauri 指令與事件橋接
-            ├── main.rs
-            └── scanner.rs   # 核心掃描邏輯
-```
+- 前端程式碼位於 `neo-fd-desktop/src/`；原生命令與事件橋接位於 `neo-fd-desktop/src-tauri/src/lib.rs`。
+- 核心掃描邏輯位於 `neo-fd-desktop/src-tauri/src/scanner.rs`，不得直接依賴使用者介面或視窗執行期。
+- 前端 IPC 契約與原生命令的名稱、參數及結果結構必須保持一致。
+- 掃描器目前限制單行讀取為 65,536 位元組、略過二進位檔案，檔案讀取命令限制為 5 MB。
+- 提交訊息遵循 Conventional Commits 1.0.0；相關檢查由 `neo-fd-desktop/.husky/` 與 `commitlint.config.js` 定義。
 
-所有 npm 指令都在 `neo-fd-desktop/` 內執行。
+## 完成條件
 
-## 4. 核心架構規範
-
-- 前端 UI 放在 `neo-fd-desktop/src/`，處理互動、狀態與顯示。
-- Tauri IPC 層放在 `neo-fd-desktop/src-tauri/src/lib.rs`，把前端請求轉成後端呼叫。
-- 核心掃描邏輯放在 `neo-fd-desktop/src-tauri/src/scanner.rs`，保持獨立，不引入 UI、視窗或 Tauri API。
-- 掃描器逐行讀取檔案時，不要在迴圈內建立新的 `String`；使用迴圈外的 `line_buf`，每次讀取前呼叫 `clear()`。
-- 使用者輸入的 Regex 必須安全處理 `Result`，不得用 `unwrap()` 或 `expect()` 讓應用程式閃退。
-- 目錄走訪與檔案讀取要處理權限不足、損壞檔案、非 UTF-8 與二進位內容；單一檔案失敗不得中斷整體掃描。
-
-## 5. 常用指令
-
-安裝相依套件：
-
-```bash
-cd neo-fd-desktop
-npm install
-```
-
-啟動桌面開發環境：
-
-```bash
-cd neo-fd-desktop
-npm run tauri dev
-```
-
-執行品質檢查：
-
-```bash
-cd neo-fd-desktop
-npm run lint:all
-```
-
-執行測試：
-
-```bash
-cd neo-fd-desktop
-npm run test:all
-```
-
-編譯桌面安裝檔：
-
-```bash
-cd neo-fd-desktop
-npm run tauri build
-```
-
-
-## 6. 完成前檢查
-
-- 確認修改範圍符合使用者需求。
-- 文件或程式碼要符合實際專案結構。
-- 能執行的檢查盡量執行；未執行時說明原因。
-- 回報修改重點、驗證結果與剩餘風險。
+- 要求的可觀察行為已完成，且相關測試或其他決定性證據存在。
+- `sh .neo_harness/verify.sh` 成功。
+- 架構、文件與執行計畫已依變更同步。
+- 未把未驗證的命令、架構或環境假設寫成既成事實。
