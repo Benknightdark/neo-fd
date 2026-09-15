@@ -76,6 +76,23 @@ describe('useScanStore', () => {
     );
   });
 
+  it('啟動掃描時為內建規則傳送邊界設定', async () => {
+    const store = useScanStore();
+    store.customPattern = '[0-9]+';
+
+    await store.startScan();
+
+    expect(invoke).toHaveBeenCalledWith('scan_directory', {
+      path: '/',
+      patterns: [
+        ['身分證字號', '[A-Za-z][12]\\d{8}', true],
+        ['台灣十大姓氏', '[陳林黃張李王吳劉蔡楊][\u4e00-\u9fa5]{2}', true],
+        ['自定義', '[0-9]+', false],
+      ],
+      maxResults: null,
+    });
+  });
+
   it('啟動掃描時記錄開始時間並清空結束時間', async () => {
     const store = useScanStore();
     store.scanEndTime = new Date('2026-06-24T07:00:00.000Z');

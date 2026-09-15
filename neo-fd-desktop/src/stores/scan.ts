@@ -1,12 +1,19 @@
 import { listen } from '@tauri-apps/api/event';
 import { defineStore } from 'pinia';
 import { ref, shallowRef, triggerRef } from 'vue';
-import { type ScanResult, scannerApi } from '../api/ipc';
+import { type ScanPattern, type ScanResult, scannerApi } from '../api/ipc';
 import { useNotificationStore } from './notification';
 
 export interface ScanResultItem extends ScanResult {
   id: number;
   rowKind: 'result';
+}
+
+interface BuiltinPattern {
+  name: string;
+  pattern: string;
+  enabled: boolean;
+  requiresBoundary: boolean;
 }
 
 const RESULT_FLUSH_INTERVAL_MS = 16;
@@ -30,12 +37,18 @@ export const useScanStore = defineStore('scan', () => {
   const resultsVersion = ref(0);
 
   // 預設內建的比對規則模式
-  const selectedPatterns = ref([
-    { name: '身分證字號', pattern: '[A-Za-z][12]\\d{8}', enabled: true },
+  const selectedPatterns = ref<BuiltinPattern[]>([
+    {
+      name: '身分證字號',
+      pattern: '[A-Za-z][12]\\d{8}',
+      enabled: true,
+      requiresBoundary: true,
+    },
     {
       name: '台灣十大姓氏',
       pattern: '[陳林黃張李王吳劉蔡楊][\u4e00-\u9fa5]{2}',
       enabled: true,
+      requiresBoundary: true,
     },
   ]);
 
@@ -142,12 +155,12 @@ export const useScanStore = defineStore('scan', () => {
     if (isScanning.value) return;
 
     // 彙整啟用的比對規則
-    const activePatterns: [string, string][] = selectedPatterns.value
+    const activePatterns: ScanPattern[] = selectedPatterns.value
       .filter((p) => p.enabled)
-      .map((p) => [p.name, p.pattern]);
+      .map((p): ScanPattern => [p.name, p.pattern, p.requiresBoundary]);
 
     if (customPattern.value) {
-      activePatterns.push([customName.value, customPattern.value]);
+      activePatterns.push([customName.value, customPattern.value, false]);
     }
 
     // 防禦阻擋：至少須啟用一項規則

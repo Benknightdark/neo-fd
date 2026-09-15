@@ -19,14 +19,14 @@ async fn scan_directory(
     app: tauri::AppHandle,
     state: tauri::State<'_, AppScanState>,
     path: String,
-    patterns: Vec<(String, String)>,
+    patterns: Vec<(String, String, bool)>,
     max_results: Option<usize>,
 ) -> Result<(), String> {
     let mut regex_patterns = Vec::new();
-    for (name, p) in patterns {
+    for (name, p, requires_boundary) in patterns {
         let re = Regex::new(&p).map_err(|e| e.to_string())?;
         let name_arc: Arc<str> = Arc::from(name.as_str());
-        regex_patterns.push((name_arc, re));
+        regex_patterns.push((name_arc, re, requires_boundary));
     }
 
     // 重設中止狀態

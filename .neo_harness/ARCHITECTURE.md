@@ -17,13 +17,13 @@
 | `neo-fd-desktop/src/components/*.vue` | 提供路徑與規則設定、結果列表或樹狀檢視、內容抽屜及通知畫面 | Store、IPC 封裝、結果樹工具 | 原生命令的實作細節 | `neo-fd-desktop/src/components/ScanSidebar.vue`、`neo-fd-desktop/src/components/ScanResultsTable.vue`、`neo-fd-desktop/src/components/CodeViewerDrawer.vue`、`neo-fd-desktop/src/components/ToastNotifications.vue` |
 | `neo-fd-desktop/src/utils/resultTree.ts` | 將掃描結果轉為可折疊的目錄、檔案及匹配節點 | `ScanResultItem` 型別 | UI、IPC、檔案系統 | `neo-fd-desktop/src/utils/resultTree.ts` |
 | `neo-fd-desktop/src-tauri/src/lib.rs` | 驗證正則規則，建立掃描背景工作，轉送命令與批次事件 | `scanner.rs`、正則比對、執行緒與事件介面 | 前端元件與瀏覽器 DOM | `neo-fd-desktop/src-tauri/src/lib.rs` |
-| `neo-fd-desktop/src-tauri/src/scanner.rs` | 平行走訪目錄、逐行比對檔案、處理取消與結果上限 | 標準檔案介面、目錄走訪、正則比對 | 使用者介面、視窗與事件 API | `neo-fd-desktop/src-tauri/src/scanner.rs` |
+| `neo-fd-desktop/src-tauri/src/scanner.rs` | 平行走訪目錄、逐行比對檔案、依規則旗標檢查左右邊界、處理取消與結果上限 | 標準檔案介面、目錄走訪、正則比對 | 使用者介面、視窗與事件 API | `neo-fd-desktop/src-tauri/src/scanner.rs` |
 | `neo-fd-desktop/src-tauri/src/main.rs` | 原生二進位檔入口 | `lib.rs::run` | 掃描與檔案業務邏輯 | `neo-fd-desktop/src-tauri/src/main.rs` |
 
 ## 資料與控制流程
 
 1. 使用者在 `neo-fd-desktop/src/components/ScanSidebar.vue` 輸入路徑、啟用內建規則或輸入自定義規則，並可設定正整數結果上限。
-2. `neo-fd-desktop/src/stores/scan.ts` 組合啟用規則並呼叫 `scannerApi.startScan`；`neo-fd-desktop/src/api/ipc.ts` 將呼叫轉為 `scan_directory` 命令。
+2. `neo-fd-desktop/src/stores/scan.ts` 組合啟用規則與邊界旗標並呼叫 `scannerApi.startScan`；`neo-fd-desktop/src/api/ipc.ts` 將呼叫轉為 `scan_directory` 命令。
 3. `neo-fd-desktop/src-tauri/src/lib.rs` 編譯正則規則，建立有界結果通道與背景執行緒，讓 `neo-fd-desktop/src-tauri/src/scanner.rs` 走訪目錄並產生匹配結果。
 4. 原生層以 `scan-result-batch` 事件傳送結果，以 `scan-finished` 事件表示工作結束；Store 以前端批次方式更新結果與檔案路徑索引。
 5. `neo-fd-desktop/src/components/ScanResultsTable.vue` 以列表或目錄樹呈現結果。使用者點擊匹配項目後，`neo-fd-desktop/src/App.vue` 開啟 `neo-fd-desktop/src/components/CodeViewerDrawer.vue`。
@@ -35,6 +35,7 @@
 - `neo-fd-desktop/src-tauri/src/lib.rs` 是前端命令與原生工作之間的邊界，掃描結果以事件而非同步命令返回值傳送。
 - `neo-fd-desktop/src-tauri/src/scanner.rs` 不匯入前端或視窗執行期；單一檔案開啟、讀取或目錄走訪錯誤目前會被略過，不中斷整體掃描。
 - 掃描器將目錄走訪設為不略過隱藏項目但遵循忽略規則；二進位檔案會略過，單行讀取上限為 65,536 位元組。
+- 需要邊界的規則只有在匹配內容左右兩側均為 Unicode 空白或 Unicode 標點時才回報；行首與行尾視為有效邊界，自定義規則不啟用此檢查。
 - `read_file_content` 只接受檔案，且檔案大小不得超過 5 MB；寫入與刪除命令只檢查目標存在且為檔案。
 - 空白掃描路徑會由 Store 轉為 `/`；這是目前實作行為，不是安全範圍限制。
 
@@ -42,7 +43,7 @@
 
 | 不變量 | 狀態 | 驗證方式 |
 | :--- | :--- | :--- |
-| IPC 命令名稱與結果資料欄位保持一致 | 文件規則；部分由測試覆蓋 | `neo-fd-desktop/src/api/ipc.ts`、`neo-fd-desktop/src-tauri/src/lib.rs`、`neo-fd-desktop/src/stores/scan.test.ts` |
+| IPC 命令名稱、掃描規則 tuple 與結果資料欄位保持一致 | 文件規則；部分由測試覆蓋 | `neo-fd-desktop/src/api/ipc.ts`、`neo-fd-desktop/src-tauri/src/lib.rs`、`neo-fd-desktop/src/stores/scan.test.ts` |
 | 最大匹配筆數必須是空值或大於 0 的整數 | 可執行規則 | `npm --prefix neo-fd-desktop run test` |
 | 批次結果建立穩定 ID 並維護檔案路徑索引 | 可執行規則 | `npm --prefix neo-fd-desktop run test` |
 | 目錄樹依折疊狀態輸出節點 | 可執行規則 | `npm --prefix neo-fd-desktop run test` |
