@@ -5,8 +5,9 @@
 - 產品前端專案根目錄是 `neo-fd-desktop/`，依賴鎖定於 `neo-fd-desktop/package-lock.json`。
 - 前端測試專案根目錄是 `tests/frontend/`，依賴鎖定於 `tests/frontend/package-lock.json`。
 - 後端測試專案根目錄是 `tests/backend/`，依賴鎖定於 `tests/backend/Cargo.lock`。
-- `neo-fd-desktop/package.json` 定義開發伺服器、前端建置、靜態檢查與桌面命令；測試命令集中於 `tests/frontend/package.json` 與 `tests/backend/Cargo.toml`。
+- `neo-fd-desktop/package.json` 定義開發伺服器、前端建置、靜態檢查與正式／開發桌面命令；測試命令集中於 `tests/frontend/package.json` 與 `tests/backend/Cargo.toml`。
 - `neo-fd-desktop/src-tauri/tauri.conf.json` 將開發前端伺服器設為 `http://localhost:1420`，建置前命令為 `npm run build`，前端輸出目錄為 `../dist`。
+- `neo-fd-desktop/src-tauri/tauri.dev.conf.json` 透過 Tauri 設定合併機制覆寫開發名稱、identifier、視窗標題、開發建置命令及開發圖示。
 - 驗證工作流使用 Node.js 20 與 Rust stable；Rust 專案使用 `edition = "2021"`，並提交 `Cargo.lock`。
 - Linux 驗證工作流會安裝桌面建置所需的系統套件；macOS 與 Windows 的完整前置條件未在專案中集中定義。
 
@@ -17,9 +18,11 @@
 ```text
 npm --prefix neo-fd-desktop ci
 npm --prefix neo-fd-desktop run dev
-npm --prefix neo-fd-desktop run tauri -- dev
+npm --prefix neo-fd-desktop run tauri:dev
 npm --prefix neo-fd-desktop run build
-npm --prefix neo-fd-desktop run tauri -- build
+npm --prefix neo-fd-desktop run build:dev
+npm --prefix neo-fd-desktop run tauri:build
+npm --prefix neo-fd-desktop run tauri:build:dev
 npm --prefix tests/frontend ci
 npm --prefix tests/frontend run test:unit
 npm --prefix tests/frontend exec -- playwright install chromium
@@ -28,7 +31,7 @@ cargo test --manifest-path tests/backend/Cargo.toml
 sh .neo_harness/verify.sh
 ```
 
-`run dev` 只啟動前端開發伺服器；`run tauri -- dev` 依 `tauri.conf.json` 的設定啟動桌面開發環境。專案未定義專用停止命令；停止方式未由設定檔固定。
+`run dev` 只啟動前端開發伺服器；`tauri:dev` 依 `tauri.dev.conf.json` 啟動開發身份的桌面程式；`tauri:build` 使用正式設定；`tauri:build:dev` 使用開發設定建立測試安裝包。專案未定義專用停止命令；停止方式未由設定檔固定。
 
 ## 產物與重現性
 

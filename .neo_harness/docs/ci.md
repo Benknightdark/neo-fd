@@ -17,7 +17,7 @@
 
 `.github/workflows/release.yml` 在 `main`、`master` 分支推送或 `v*` 標籤推送時觸發。它會準備版本與標籤，依作業系統及處理器架構平行建置桌面安裝包，再產生發布說明並發布結果。
 
-發布工作流會在建置前同步 `neo-fd-desktop/package.json` 與 `neo-fd-desktop/src-tauri/tauri.conf.json` 的版本欄位。簽署憑證、發布權限及 Linux 系統依賴由工作流環境提供，未由本機專案設定完整描述。
+發布工作流會在建置前同步 `neo-fd-desktop/package.json` 與 `neo-fd-desktop/src-tauri/tauri.conf.json` 的版本欄位，並使用預設正式設定；它不會載入 `tauri.dev.conf.json`。簽署憑證、發布權限及 Linux 系統依賴由工作流環境提供，未由本機專案設定完整描述。
 
 ## 已知缺口
 

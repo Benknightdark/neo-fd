@@ -2,7 +2,7 @@
 
 ## 系統概觀
 
-`neo-fd-desktop` 是桌面檔案掃描應用程式。前端在 `neo-fd-desktop/src/` 負責設定輸入、掃描狀態、結果呈現與檔案內容操作；原生層在 `neo-fd-desktop/src-tauri/src/` 提供命令、背景工作與檔案掃描。兩側以命令呼叫及掃描事件交換資料。
+`neo-fd-desktop` 是桌面檔案掃描應用程式。前端在 `neo-fd-desktop/src/` 負責設定輸入、掃描狀態、結果呈現與檔案內容操作；原生層在 `neo-fd-desktop/src-tauri/src/` 提供命令、背景工作與檔案掃描。兩側以命令呼叫及掃描事件交換資料。桌面身份與安裝包設定位於 `neo-fd-desktop/src-tauri/tauri.conf.json`；開發 flavor 透過 `neo-fd-desktop/src-tauri/tauri.dev.conf.json` 合併覆寫，不進入掃描或 IPC 層。
 
 目前的主要入口是 `neo-fd-desktop/index.html` 載入 `neo-fd-desktop/src/main.ts`，`neo-fd-desktop/src/main.ts` 建立應用程式與全域狀態後掛載 `neo-fd-desktop/src/App.vue`。原生執行入口是 `neo-fd-desktop/src-tauri/src/main.rs`，委派至 `neo-fd-desktop/src-tauri/src/lib.rs` 的 `run`。
 
@@ -39,6 +39,7 @@
 - 前端只透過 `neo-fd-desktop/src/api/ipc.ts` 呼叫原生命令；命令契約包含 `scan_directory`、`cancel_scan`、`read_file_content`、`write_file_content` 與 `delete_file`。
 - `neo-fd-desktop/src-tauri/src/lib.rs` 是前端命令與原生工作之間的邊界，掃描結果以事件而非同步命令返回值傳送。
 - `neo-fd-desktop/src-tauri/src/backend.rs` 是 Tauri 命令與後端業務之間的公開服務邊界；它不依賴 Tauri 執行期，因此可由 `tests/backend/` 直接驗證。
+- `neo-fd-desktop/src-tauri/tauri.conf.json` 是正式桌面身份與發布設定；`tauri.dev.conf.json` 只供 `tauri:dev` 與 `tauri:build:dev` 使用，並以獨立 identifier、視窗標題及圖示隔離開發 flavor。
 - `tests/frontend/` 的端對端測試驗證瀏覽器中的產品組合與 IPC 參數，不宣稱涵蓋實際 Tauri 桌面執行期。
 - `neo-fd-desktop/src-tauri/src/scanner.rs` 不匯入前端或視窗執行期；單一檔案開啟、讀取或目錄走訪錯誤目前會被略過，不中斷整體掃描。
 - 掃描器將目錄走訪設為不略過隱藏項目但遵循忽略規則；二進位檔案會略過，單行讀取上限為 65,536 位元組。

@@ -6,8 +6,12 @@
   "scripts": {
     "dev": "vite",
     "build": "vue-tsc --noEmit && vite build",
+    "build:dev": "vue-tsc --noEmit && vite build --mode development",
     "preview": "vite preview",
     "tauri": "tauri",
+    "tauri:dev": "tauri dev --config src-tauri/tauri.dev.conf.json",
+    "tauri:build": "tauri build",
+    "tauri:build:dev": "tauri build --config src-tauri/tauri.dev.conf.json",
     "lint": "biome check src/",
     "format": "biome format --write src/",
     "prepare": "cd .. && husky neo-fd-desktop/.husky",
