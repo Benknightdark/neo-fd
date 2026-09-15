@@ -1,7 +1,7 @@
+import CodeViewerDrawer from '@app/components/CodeViewerDrawer.vue';
 import { mount } from '@vue/test-utils';
 import { createPinia } from 'pinia';
 import { afterEach, describe, expect, it } from 'vitest';
-import CodeViewerDrawer from './CodeViewerDrawer.vue';
 
 const initialInnerWidth = window.innerWidth;
 

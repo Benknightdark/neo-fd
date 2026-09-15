@@ -6,8 +6,8 @@ on:
   push:
     branches: [ develop ]
   # 當對 main, master, develop 分支開立 PR 時觸發
-  # pull_request:
-  #   branches: [ main, master, develop ]
+  pull_request:
+    branches: [ main, master, develop ]
 
 jobs:
   # Job 1：執行 Rust 程式碼檢查與測試
@@ -40,7 +40,9 @@ jobs:
     - name: Rust Cache
       uses: Swatinem/rust-cache@v2
       with:
-        workspaces: "neo-fd-desktop/src-tauri"
+        workspaces: |
+          neo-fd-desktop/src-tauri
+          tests/backend
         
     # 步驟 5：透過專案統一入口執行 Rust 格式、靜態檢查與測試
     - name: 原生層驗證
@@ -66,14 +68,32 @@ jobs:
       with:
         node-version: '20'
         cache: 'npm'
-        cache-dependency-path: neo-fd-desktop/package-lock.json
+        cache-dependency-path: |
+          neo-fd-desktop/package-lock.json
+          tests/frontend/package-lock.json
         
     # 步驟 3：乾淨安裝前端相依套件
     - name: Install Dependencies
       working-directory: neo-fd-desktop
       run: npm ci
+
+    # 步驟 4：乾淨安裝獨立前端測試專案相依套件
+    - name: Install Frontend Test Dependencies
+      working-directory: tests/frontend
+      run: npm ci
+
+    # 步驟 5：安裝瀏覽器端對端測試執行環境
+    - name: Install Playwright Browser on Linux
+      if: matrix.os == 'ubuntu-latest'
+      working-directory: tests/frontend
+      run: npx playwright install --with-deps chromium
+
+    - name: Install Playwright Browser
+      if: matrix.os != 'ubuntu-latest'
+      working-directory: tests/frontend
+      run: npx playwright install chromium
       
-    # 步驟 4：透過專案統一入口執行前端靜態檢查、建置與單元測試
+    # 步驟 6：透過專案統一入口執行前端靜態檢查、建置、單元與端對端測試
     - name: 前端驗證
       shell: bash
       run: bash .neo_harness/verify.sh frontend

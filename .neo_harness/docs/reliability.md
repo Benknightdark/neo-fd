@@ -2,7 +2,7 @@
 
 ## 掃描工作流程
 
-`neo-fd-desktop/src-tauri/src/lib.rs` 將掃描分成掃描執行緒與結果收集執行緒。兩者透過容量為 2,000 的同步通道交換結果；收集執行緒每 500 筆或每 100 毫秒發送一次 `scan-result-batch` 事件，最後發送 `scan-finished` 事件。
+`neo-fd-desktop/src-tauri/src/lib.rs` 將掃描分成掃描執行緒與結果收集執行緒。兩者透過容量為 2,000 的同步通道交換結果；收集執行緒每 500 筆或每 100 毫秒發送一次 `scan-result-batch` 事件，最後發送 `scan-finished` 事件。掃描與檔案操作由 `neo-fd-desktop/src-tauri/src/backend.rs` 及 `neo-fd-desktop/src-tauri/src/file_ops.rs` 提供，命令層只負責橋接。
 
 `neo-fd-desktop/src-tauri/src/scanner.rs` 使用平行目錄走訪，逐行讀取檔案，單次讀取上限為 65,536 位元組。它會略過二進位檔案與單一檔案的開啟、讀取或走訪錯誤；中止旗標會在走訪、檔案讀取及正則比對期間被檢查。啟用邊界檢查的規則只接受左右兩側為 Unicode 空白或 Unicode 標點的匹配，行首與行尾視為有效邊界，回傳內容不包含邊界字元。
 
@@ -19,6 +19,6 @@
 
 ## 驗證與缺口
 
-目前的決定性證據是 `neo-fd-desktop/src-tauri/src/scanner.rs` 的單元測試、前端 Store 測試及 `neo-fd-desktop/src/utils/resultTree.test.ts`。統一入口為 `sh .neo_harness/verify.sh`。
+目前的決定性證據是 `tests/backend/unit/scanner.rs` 的掃描單元測試、`tests/backend/e2e/filesystem.rs` 的實際檔案流程測試、`tests/frontend/unit/` 的前端單元測試，以及 `tests/frontend/e2e/` 的瀏覽器流程測試。統一入口為 `sh .neo_harness/verify.sh`。
 
-尚無涵蓋實際桌面命令、跨執行緒取消、事件遺失、權限錯誤、檔案競態或大目錄壓力的整合測試。也沒有結構化日誌、指標或可查詢的執行期診斷資料。
+瀏覽器端對端測試以 IPC 模擬驗證頁面組合與命令參數，未涵蓋實際 Tauri 桌面命令；後端端對端測試涵蓋公開服務與暫存檔案系統，但尚無涵蓋跨執行緒取消、事件遺失、權限錯誤、檔案競態或大目錄壓力的整合測試。也沒有結構化日誌、指標或可查詢的執行期診斷資料。
