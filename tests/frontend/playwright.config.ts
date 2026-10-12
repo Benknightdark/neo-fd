@@ -15,7 +15,7 @@ export default defineConfig({
     trace: 'on-first-retry',
   },
   webServer: {
-    command: 'npm --prefix ../../neo-fd-desktop run dev -- --host 127.0.0.1',
+    command: 'bun --cwd=../../neo-fd-desktop run dev -- --host 127.0.0.1',
     url: 'http://127.0.0.1:1420',
     reuseExistingServer: !isCI,
     timeout: 120_000,

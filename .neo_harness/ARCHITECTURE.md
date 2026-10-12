@@ -21,7 +21,7 @@
 | `neo-fd-desktop/src-tauri/src/file_ops.rs` | 實作檔案讀取、寫入、刪除及大小與路徑檢查 | 標準檔案介面 | 前端元件、Tauri 執行期 | `neo-fd-desktop/src-tauri/src/file_ops.rs` |
 | `neo-fd-desktop/src-tauri/src/scanner.rs` | 平行走訪目錄、逐行比對檔案、依規則旗標檢查左右邊界、處理取消與結果上限 | 標準檔案介面、目錄走訪、正則比對 | 使用者介面、視窗與事件 API | `neo-fd-desktop/src-tauri/src/scanner.rs` |
 | `neo-fd-desktop/src-tauri/src/main.rs` | 原生二進位檔入口 | `lib.rs::run` | 掃描與檔案業務邏輯 | `neo-fd-desktop/src-tauri/src/main.rs` |
-| `tests/frontend/` | 以獨立 npm 專案執行前端單元測試與瀏覽器端對端測試 | 前端產品原始碼、Vue 測試工具、Playwright | Rust 實作與實際桌面執行期 | `tests/frontend/package.json`、`tests/frontend/playwright.config.ts` |
+| `tests/frontend/` | 以獨立 Bun 專案執行前端單元測試與瀏覽器端對端測試 | 前端產品原始碼、Vue 測試工具、Playwright | Rust 實作與實際桌面執行期 | `tests/frontend/package.json`、`tests/frontend/playwright.config.ts` |
 | `tests/backend/` | 以獨立 Cargo 專案執行後端單元測試與實際檔案系統端對端測試 | `backend` 公開服務、暫存檔案系統 | Vue、Tauri 視窗與 IPC 執行期 | `tests/backend/Cargo.toml`、`tests/backend/e2e/filesystem.rs` |
 
 ## 資料與控制流程
@@ -52,12 +52,12 @@
 | 不變量 | 狀態 | 驗證方式 |
 | :--- | :--- | :--- |
 | IPC 命令名稱、掃描規則 tuple 與結果資料欄位保持一致 | 文件規則；由前端單元與瀏覽器端對端測試觀察 | `neo-fd-desktop/src/api/ipc.ts`、`neo-fd-desktop/src-tauri/src/lib.rs`、`tests/frontend/unit/scan.spec.ts`、`tests/frontend/e2e/scan-flow.spec.ts` |
-| 最大匹配筆數必須是空值或大於 0 的整數 | 可執行規則 | `npm --prefix tests/frontend run test:unit` |
-| 批次結果建立穩定 ID 並維護檔案路徑索引 | 可執行規則 | `npm --prefix tests/frontend run test:unit` |
-| 目錄樹依折疊狀態輸出節點 | 可執行規則 | `npm --prefix tests/frontend run test:unit` |
+| 最大匹配筆數必須是空值或大於 0 的整數 | 可執行規則 | `bun --cwd=tests/frontend run test:unit` |
+| 批次結果建立穩定 ID 並維護檔案路徑索引 | 可執行規則 | `bun --cwd=tests/frontend run test:unit` |
+| 目錄樹依折疊狀態輸出節點 | 可執行規則 | `bun --cwd=tests/frontend run test:unit` |
 | Rust 格式、靜態檢查與測試不得失敗 | 可執行規則 | `sh .neo_harness/verify.sh rust` |
 | 檔案掃描、讀取、寫入與刪除服務維持限制與結果 | 可執行規則 | `cargo test --manifest-path tests/backend/Cargo.toml` |
-| 前端掃描流程傳送 IPC 並呈現結果 | 可執行規則 | `npm --prefix tests/frontend run test:e2e` |
+| 前端掃描流程傳送 IPC 並呈現結果 | 可執行規則 | `bun --cwd=tests/frontend run test:e2e` |
 | `scanner.rs` 不直接依賴前端或視窗層 | 文件規則 | 檢視 `neo-fd-desktop/src-tauri/src/scanner.rs` 的匯入與模組邊界 |
 
 ## 未確認事項

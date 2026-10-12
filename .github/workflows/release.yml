@@ -83,7 +83,13 @@ jobs:
         ref: ${{ needs.prepare.outputs.tag }}
         fetch-depth: 0
 
-    # 步驟 2：使用 Node.js 動態將最新版號同步寫入 package.json 與 tauri.conf.json
+    # 步驟 2：設定 Node.js 執行環境
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+
+    # 步驟 3：使用 Node.js 動態將最新版號同步寫入 package.json 與 tauri.conf.json
     - name: Sync Workspace Configurations
       shell: node {0}
       run: |
@@ -103,13 +109,10 @@ jobs:
         fs.writeFileSync(tauriPath, JSON.stringify(tauri, null, 2) + '\n');
         console.log(`Updated tauri.conf.json version to: ${newVer}`);
 
-    # 步驟 3：設定 Node.js 執行環境
-    - name: Setup Node.js
-      uses: actions/setup-node@v4
+    - name: Setup Bun
+      uses: oven-sh/setup-bun@v2
       with:
-        node-version: '20'
-        cache: 'npm'
-        cache-dependency-path: neo-fd-desktop/package-lock.json
+        bun-version-file: neo-fd-desktop/package.json
         
     # 步驟 4：設定 Rust 工具鏈
     - name: Setup Rust
@@ -127,10 +130,10 @@ jobs:
         sudo apt-get update
         sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev
         
-    # 步驟 7：安裝前端打包所需的 npm 套件
+    # 步驟 7：安裝前端打包所需的 Bun 套件
     - name: Install Frontend Dependencies
       working-directory: neo-fd-desktop
-      run: npm ci
+      run: bun ci
 
     # 步驟 7.5：檢查是否有配置 Apple 憑證的 Secrets。若有，則將其導出至 GitHub 環境變數中以供 tauri-action 啟用簽署
     - name: Configure Apple Codesigning

@@ -62,36 +62,37 @@ jobs:
     # 步驟 1：檢出專案程式碼
     - uses: actions/checkout@v4
     
-    # 步驟 2：設定 Node.js 執行環境並啟用 npm 相依快取
+    # 步驟 2：設定 Node.js 與 Bun 執行環境
     - name: Setup Node.js
       uses: actions/setup-node@v4
       with:
         node-version: '20'
-        cache: 'npm'
-        cache-dependency-path: |
-          neo-fd-desktop/package-lock.json
-          tests/frontend/package-lock.json
+
+    - name: Setup Bun
+      uses: oven-sh/setup-bun@v2
+      with:
+        bun-version-file: neo-fd-desktop/package.json
         
-    # 步驟 3：乾淨安裝前端相依套件
+    # 步驟 3：安裝前端相依套件
     - name: Install Dependencies
       working-directory: neo-fd-desktop
-      run: npm ci
+      run: bun ci
 
-    # 步驟 4：乾淨安裝獨立前端測試專案相依套件
+    # 步驟 4：安裝獨立前端測試專案相依套件
     - name: Install Frontend Test Dependencies
       working-directory: tests/frontend
-      run: npm ci
+      run: bun ci
 
     # 步驟 5：安裝瀏覽器端對端測試執行環境
     - name: Install Playwright Browser on Linux
       if: matrix.os == 'ubuntu-latest'
       working-directory: tests/frontend
-      run: npx playwright install --with-deps chromium
+      run: bunx playwright install --with-deps chromium
 
     - name: Install Playwright Browser
       if: matrix.os != 'ubuntu-latest'
       working-directory: tests/frontend
-      run: npx playwright install chromium
+      run: bunx playwright install chromium
       
     # 步驟 6：透過專案統一入口執行前端靜態檢查、建置、單元與端對端測試
     - name: 前端驗證

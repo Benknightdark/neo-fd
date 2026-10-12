@@ -17,7 +17,7 @@
 
 - Tauri 基礎設定：`neo-fd-desktop/src-tauri/tauri.conf.json`
 - 開發 flavor 設定：`neo-fd-desktop/src-tauri/tauri.dev.conf.json`
-- npm 與 Vite 建置入口：`neo-fd-desktop/package.json`
+- Bun 與 Vite 建置入口：`neo-fd-desktop/package.json`
 - 前端環境標籤：`neo-fd-desktop/src/utils/appMeta.ts`
 - 正式圖示：`neo-fd-desktop/src-tauri/icons/`
 - 開發圖示：`neo-fd-desktop/src-tauri/icons/dev/`
@@ -62,13 +62,14 @@
 - 2026-09-15：macOS 正式與開發 `.app` 均成功產生；兩者的 bundle name、identifier 與 `icon.icns` 已完成對照。
 - 2026-09-15：`tauri:dev` 實際啟動 Vite 與 Rust 桌面程序後可正常停止；系統輔助取用權限不足，未能以腳本讀取視窗標題。
 - 2026-09-15：完成工作樹程式碼審查，未發現可操作的重大或一般問題。
+- 2026-10-12：本計畫 2026-09-15 記錄的 npm 驗證結果是歷史證據；以下更新後的命令範例使用 Bun，舊結果不代表 Bun 遷移後的驗證狀態。
 
 ## 具體命令與預期結果
 
 圖示產生：
 
 ```text
-npm --prefix neo-fd-desktop run tauri -- icon src-tauri/icons/dev-icon.svg --output src-tauri/icons/dev
+bun --cwd=neo-fd-desktop run tauri -- icon src-tauri/icons/dev-icon.svg --output src-tauri/icons/dev
 ```
 
 預期 `neo-fd-desktop/src-tauri/icons/dev/` 產生有效的 PNG、ICNS、ICO 與其他 Tauri 標準圖示檔案。
@@ -76,9 +77,9 @@ npm --prefix neo-fd-desktop run tauri -- icon src-tauri/icons/dev-icon.svg --out
 建置入口：
 
 ```text
-npm --prefix neo-fd-desktop run tauri:dev
-npm --prefix neo-fd-desktop run tauri:build
-npm --prefix neo-fd-desktop run tauri:build:dev
+bun --cwd=neo-fd-desktop run tauri:dev
+bun --cwd=neo-fd-desktop run tauri:build
+bun --cwd=neo-fd-desktop run tauri:build:dev
 ```
 
 預期第一個命令啟動開發身份，第二個命令建立正式身份，第三個命令建立可與正式版並存的開發安裝包。
@@ -88,15 +89,15 @@ npm --prefix neo-fd-desktop run tauri:build:dev
 自動驗證：
 
 ```text
-npm --prefix neo-fd-desktop run lint
-npm --prefix neo-fd-desktop run build
-npm --prefix neo-fd-desktop run build:dev
-npm --prefix tests/frontend run lint
-npm --prefix tests/frontend run typecheck
-npm --prefix tests/frontend run test:unit
-npm --prefix tests/frontend run test:e2e
-npm --prefix neo-fd-desktop run tauri:build -- --no-bundle
-npm --prefix neo-fd-desktop run tauri:build:dev -- --no-bundle
+bun --cwd=neo-fd-desktop run lint
+bun --cwd=neo-fd-desktop run build
+bun --cwd=neo-fd-desktop run build:dev
+bun --cwd=tests/frontend run lint
+bun --cwd=tests/frontend run typecheck
+bun --cwd=tests/frontend run test:unit
+bun --cwd=tests/frontend run test:e2e
+bun --cwd=neo-fd-desktop run tauri:build -- --no-bundle
+bun --cwd=neo-fd-desktop run tauri:build:dev -- --no-bundle
 sh .neo_harness/verify.sh
 ```
 

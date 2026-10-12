@@ -41,7 +41,7 @@ describe('Tauri desktop flavors', () => {
     expect(production.identifier).toBe('com.ben.neo-fd-desktop');
     expect(development.productName).toBe('neo-fd-desktop-dev');
     expect(development.identifier).toBe('com.ben.neo-fd-desktop.dev');
-    expect(development.build?.beforeBuildCommand).toBe('npm run build:dev');
+    expect(development.build?.beforeBuildCommand).toBe('bun run build:dev');
     expect(development.app?.windows).toEqual([
       {
         title: 'neo-fd-desktop 開發版',

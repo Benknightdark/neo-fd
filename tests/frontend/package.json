@@ -2,13 +2,14 @@
   "name": "neo-fd-frontend-tests",
   "private": true,
   "version": "0.1.0",
+  "packageManager": "bun@1.4.3",
   "type": "module",
   "scripts": {
     "lint": "biome check .",
     "typecheck": "tsc --noEmit",
     "test:unit": "vitest run --reporter=dot",
     "test:e2e": "playwright test",
-    "test": "npm run lint && npm run typecheck && npm run test:unit && npm run test:e2e"
+    "test": "bun run lint && bun run typecheck && bun run test:unit && bun run test:e2e"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.11.0",

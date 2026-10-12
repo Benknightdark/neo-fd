@@ -1,1 +1,9 @@
-npx --prefix neo-fd-desktop --no -- commitlint --cwd neo-fd-desktop --edit "$1"
+#!/usr/bin/env sh
+
+set -eu
+
+repo_root=$(git rev-parse --show-toplevel)
+commit_message=$(cd "$(dirname "$1")" && pwd)/$(basename "$1")
+
+cd "$repo_root/neo-fd-desktop"
+bunx --bun --no-install commitlint --cwd . --edit "$commit_message"

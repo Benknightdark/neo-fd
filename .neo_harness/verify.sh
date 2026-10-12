@@ -13,8 +13,8 @@ usage() {
 }
 
 run_frontend_lint() {
-  npm --prefix neo-fd-desktop run lint
-  npm --prefix tests/frontend run lint
+  bun --cwd=neo-fd-desktop run lint
+  bun --cwd=tests/frontend run lint
 }
 
 run_rust_lint() {
@@ -28,12 +28,12 @@ run_rust_lint() {
 }
 
 run_frontend() {
-  npm --prefix neo-fd-desktop run lint
-  npm --prefix neo-fd-desktop run build
-  npm --prefix tests/frontend run lint
-  npm --prefix tests/frontend run typecheck
-  npm --prefix tests/frontend run test:unit
-  npm --prefix tests/frontend run test:e2e
+  bun --cwd=neo-fd-desktop run lint
+  bun --cwd=neo-fd-desktop run build
+  bun --cwd=tests/frontend run lint
+  bun --cwd=tests/frontend run typecheck
+  bun --cwd=tests/frontend run test:unit
+  bun --cwd=tests/frontend run test:e2e
 }
 
 run_rust() {

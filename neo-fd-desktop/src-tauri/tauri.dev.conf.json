@@ -3,7 +3,7 @@
   "productName": "neo-fd-desktop-dev",
   "identifier": "com.ben.neo-fd-desktop.dev",
   "build": {
-    "beforeBuildCommand": "npm run build:dev"
+    "beforeBuildCommand": "bun run build:dev"
   },
   "app": {
     "windows": [
