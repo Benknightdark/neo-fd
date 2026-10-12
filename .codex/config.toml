@@ -1,2 +1,2 @@
 model_verbosity = "low"
-tool_output_token_limit = 8000
+model_reasoning_effort = "ultra" #"max"
